@@ -1,0 +1,3 @@
+/home/rozmusel/dev/Black_box/build/CMakeFiles/main.dir
+/home/rozmusel/dev/Black_box/build/CMakeFiles/edit_cache.dir
+/home/rozmusel/dev/Black_box/build/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/main.dir/link.d CMakeFiles/main.dir/lib/bot/bot.c.o CMakeFiles/main.dir/src/main.c.o CMakeFiles/main.dir/lib/archiver/archiver.cpp.o CMakeFiles/main.dir/lib/pdf/pdf.cpp.o -o bin/main  -Wl,-rpath,/usr/local/lib /usr/local/lib/libcurl.so.4.8.0 -ljson-c -lzip /usr/local/lib/libpodofo.so.1.1.0

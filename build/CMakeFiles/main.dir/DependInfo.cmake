@@ -1,0 +1,27 @@
+
+# Consider dependencies only in project.
+set(CMAKE_DEPENDS_IN_PROJECT_ONLY OFF)
+
+# The set of languages for which implicit dependencies are needed:
+set(CMAKE_DEPENDS_LANGUAGES
+  )
+
+# The set of dependency files which are needed:
+set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/home/rozmusel/dev/Black_box/lib/bot/bot.c" "CMakeFiles/main.dir/lib/bot/bot.c.o" "gcc" "CMakeFiles/main.dir/lib/bot/bot.c.o.d"
+  "/home/rozmusel/dev/Black_box/src/main.c" "CMakeFiles/main.dir/src/main.c.o" "gcc" "CMakeFiles/main.dir/src/main.c.o.d"
+  "/home/rozmusel/dev/Black_box/lib/archiver/archiver.cpp" "CMakeFiles/main.dir/lib/archiver/archiver.cpp.o" "gcc" "CMakeFiles/main.dir/lib/archiver/archiver.cpp.o.d"
+  "/home/rozmusel/dev/Black_box/lib/pdf/pdf.cpp" "CMakeFiles/main.dir/lib/pdf/pdf.cpp.o" "gcc" "CMakeFiles/main.dir/lib/pdf/pdf.cpp.o.d"
+  "" "bin/main" "gcc" "CMakeFiles/main.dir/link.d"
+  )
+
+# Targets to which this target links which contain Fortran sources.
+set(CMAKE_Fortran_TARGET_LINKED_INFO_FILES
+  )
+
+# Targets to which this target links which contain Fortran sources.
+set(CMAKE_Fortran_TARGET_FORWARD_LINKED_INFO_FILES
+  )
+
+# Fortran module output directory.
+set(CMAKE_Fortran_TARGET_MODULE_DIR "")
