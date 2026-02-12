@@ -8,6 +8,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/main.dir/lib/pdf/pdf.cpp.o.d"
   "CMakeFiles/main.dir/src/main.c.o"
   "CMakeFiles/main.dir/src/main.c.o.d"
+  "CMakeFiles/main.dir/src/path/path.c.o"
+  "CMakeFiles/main.dir/src/path/path.c.o.d"
   "bin/main"
   "bin/main.pdb"
 )

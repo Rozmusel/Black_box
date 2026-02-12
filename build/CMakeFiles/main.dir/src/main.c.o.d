@@ -87,4 +87,5 @@ CMakeFiles/main.dir/src/main.c.o: /home/rozmusel/dev/Black_box/src/main.c \
  /usr/include/x86_64-linux-gnu/bits/stat.h \
  /usr/include/x86_64-linux-gnu/bits/struct_stat.h /usr/include/libgen.h \
  /home/rozmusel/dev/Black_box/lib/pdf/pdf.h \
- /home/rozmusel/dev/Black_box/lib/archiver/archiver.h
+ /home/rozmusel/dev/Black_box/lib/archiver/archiver.h \
+ /home/rozmusel/dev/Black_box/src/path/path.h

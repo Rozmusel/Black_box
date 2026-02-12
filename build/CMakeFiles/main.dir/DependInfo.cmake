@@ -10,6 +10,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/rozmusel/dev/Black_box/lib/bot/bot.c" "CMakeFiles/main.dir/lib/bot/bot.c.o" "gcc" "CMakeFiles/main.dir/lib/bot/bot.c.o.d"
   "/home/rozmusel/dev/Black_box/src/main.c" "CMakeFiles/main.dir/src/main.c.o" "gcc" "CMakeFiles/main.dir/src/main.c.o.d"
+  "/home/rozmusel/dev/Black_box/src/path/path.c" "CMakeFiles/main.dir/src/path/path.c.o" "gcc" "CMakeFiles/main.dir/src/path/path.c.o.d"
   "/home/rozmusel/dev/Black_box/lib/archiver/archiver.cpp" "CMakeFiles/main.dir/lib/archiver/archiver.cpp.o" "gcc" "CMakeFiles/main.dir/lib/archiver/archiver.cpp.o.d"
   "/home/rozmusel/dev/Black_box/lib/pdf/pdf.cpp" "CMakeFiles/main.dir/lib/pdf/pdf.cpp.o" "gcc" "CMakeFiles/main.dir/lib/pdf/pdf.cpp.o.d"
   "" "bin/main" "gcc" "CMakeFiles/main.dir/link.d"

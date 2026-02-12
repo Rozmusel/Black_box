@@ -5,13 +5,13 @@
 # compile CXX with /usr/bin/c++
 C_DEFINES = 
 
-C_INCLUDES = -I/home/rozmusel/dev/Black_box/lib/bot -I/home/rozmusel/dev/Black_box/lib/archiver -I/home/rozmusel/dev/Black_box/lib/pdf -I/usr/local/include/json-c
+C_INCLUDES = -I/home/rozmusel/dev/Black_box/lib/bot -I/home/rozmusel/dev/Black_box/lib/archiver -I/home/rozmusel/dev/Black_box/lib/pdf -I/home/rozmusel/dev/Black_box/src/path -I/usr/local/include/json-c
 
 C_FLAGS = -std=c11
 
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/home/rozmusel/dev/Black_box/lib/bot -I/home/rozmusel/dev/Black_box/lib/archiver -I/home/rozmusel/dev/Black_box/lib/pdf -I/usr/local/include/json-c
+CXX_INCLUDES = -I/home/rozmusel/dev/Black_box/lib/bot -I/home/rozmusel/dev/Black_box/lib/archiver -I/home/rozmusel/dev/Black_box/lib/pdf -I/home/rozmusel/dev/Black_box/src/path -I/usr/local/include/json-c
 
 CXX_FLAGS = -std=gnu++17
 

@@ -225,6 +225,30 @@ src/main.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/src/main.c.s
 .PHONY : src/main.c.s
 
+src/path/path.o: src/path/path.c.o
+.PHONY : src/path/path.o
+
+# target to build an object file
+src/path/path.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/src/path/path.c.o
+.PHONY : src/path/path.c.o
+
+src/path/path.i: src/path/path.c.i
+.PHONY : src/path/path.i
+
+# target to preprocess a source file
+src/path/path.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/src/path/path.c.i
+.PHONY : src/path/path.c.i
+
+src/path/path.s: src/path/path.c.s
+.PHONY : src/path/path.s
+
+# target to generate assembly for a file
+src/path/path.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/src/path/path.c.s
+.PHONY : src/path/path.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -246,6 +270,9 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/path/path.o"
+	@echo "... src/path/path.i"
+	@echo "... src/path/path.s"
 .PHONY : help
 
 

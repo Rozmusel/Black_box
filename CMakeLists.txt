@@ -13,10 +13,12 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 include_directories(${CMAKE_SOURCE_DIR}/lib/bot)
 include_directories(${CMAKE_SOURCE_DIR}/lib/archiver)
 include_directories(${CMAKE_SOURCE_DIR}/lib/pdf)
+include_directories(${CMAKE_SOURCE_DIR}/src/path)
 
 # Collect sources (C and C++). Adjust patterns if you add sources elsewhere.
 file(GLOB_RECURSE C_SOURCES_RAW
     ${CMAKE_SOURCE_DIR}/src/*.c
+    ${CMAKE_SOURCE_DIR}/src/**/*.c
     ${CMAKE_SOURCE_DIR}/lib/bot/*.c
     ${CMAKE_SOURCE_DIR}/lib/bot/**/*.c
 )

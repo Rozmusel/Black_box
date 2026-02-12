@@ -4,6 +4,7 @@ bin/main: \
   /usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o \
   CMakeFiles/main.dir/lib/bot/bot.c.o \
   CMakeFiles/main.dir/src/main.c.o \
+  CMakeFiles/main.dir/src/path/path.c.o \
   CMakeFiles/main.dir/lib/archiver/archiver.cpp.o \
   CMakeFiles/main.dir/lib/pdf/pdf.cpp.o \
   /usr/local/lib/libcurl.so.4.8.0 \
@@ -71,6 +72,8 @@ bin/main: \
 CMakeFiles/main.dir/lib/bot/bot.c.o:
 
 CMakeFiles/main.dir/src/main.c.o:
+
+CMakeFiles/main.dir/src/path/path.c.o:
 
 CMakeFiles/main.dir/lib/archiver/archiver.cpp.o:
 

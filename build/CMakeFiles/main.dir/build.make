@@ -100,10 +100,24 @@ CMakeFiles/main.dir/src/main.c.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/main.dir/src/main.c.s"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/rozmusel/dev/Black_box/src/main.c -o CMakeFiles/main.dir/src/main.c.s
 
+CMakeFiles/main.dir/src/path/path.c.o: CMakeFiles/main.dir/flags.make
+CMakeFiles/main.dir/src/path/path.c.o: /home/rozmusel/dev/Black_box/src/path/path.c
+CMakeFiles/main.dir/src/path/path.c.o: CMakeFiles/main.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/rozmusel/dev/Black_box/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building C object CMakeFiles/main.dir/src/path/path.c.o"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/main.dir/src/path/path.c.o -MF CMakeFiles/main.dir/src/path/path.c.o.d -o CMakeFiles/main.dir/src/path/path.c.o -c /home/rozmusel/dev/Black_box/src/path/path.c
+
+CMakeFiles/main.dir/src/path/path.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/main.dir/src/path/path.c.i"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/rozmusel/dev/Black_box/src/path/path.c > CMakeFiles/main.dir/src/path/path.c.i
+
+CMakeFiles/main.dir/src/path/path.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/main.dir/src/path/path.c.s"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/rozmusel/dev/Black_box/src/path/path.c -o CMakeFiles/main.dir/src/path/path.c.s
+
 CMakeFiles/main.dir/lib/archiver/archiver.cpp.o: CMakeFiles/main.dir/flags.make
 CMakeFiles/main.dir/lib/archiver/archiver.cpp.o: /home/rozmusel/dev/Black_box/lib/archiver/archiver.cpp
 CMakeFiles/main.dir/lib/archiver/archiver.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/rozmusel/dev/Black_box/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/main.dir/lib/archiver/archiver.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/rozmusel/dev/Black_box/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/main.dir/lib/archiver/archiver.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/lib/archiver/archiver.cpp.o -MF CMakeFiles/main.dir/lib/archiver/archiver.cpp.o.d -o CMakeFiles/main.dir/lib/archiver/archiver.cpp.o -c /home/rozmusel/dev/Black_box/lib/archiver/archiver.cpp
 
 CMakeFiles/main.dir/lib/archiver/archiver.cpp.i: cmake_force
@@ -117,7 +131,7 @@ CMakeFiles/main.dir/lib/archiver/archiver.cpp.s: cmake_force
 CMakeFiles/main.dir/lib/pdf/pdf.cpp.o: CMakeFiles/main.dir/flags.make
 CMakeFiles/main.dir/lib/pdf/pdf.cpp.o: /home/rozmusel/dev/Black_box/lib/pdf/pdf.cpp
 CMakeFiles/main.dir/lib/pdf/pdf.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/rozmusel/dev/Black_box/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/main.dir/lib/pdf/pdf.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/rozmusel/dev/Black_box/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/main.dir/lib/pdf/pdf.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/lib/pdf/pdf.cpp.o -MF CMakeFiles/main.dir/lib/pdf/pdf.cpp.o.d -o CMakeFiles/main.dir/lib/pdf/pdf.cpp.o -c /home/rozmusel/dev/Black_box/lib/pdf/pdf.cpp
 
 CMakeFiles/main.dir/lib/pdf/pdf.cpp.i: cmake_force
@@ -132,6 +146,7 @@ CMakeFiles/main.dir/lib/pdf/pdf.cpp.s: cmake_force
 main_OBJECTS = \
 "CMakeFiles/main.dir/lib/bot/bot.c.o" \
 "CMakeFiles/main.dir/src/main.c.o" \
+"CMakeFiles/main.dir/src/path/path.c.o" \
 "CMakeFiles/main.dir/lib/archiver/archiver.cpp.o" \
 "CMakeFiles/main.dir/lib/pdf/pdf.cpp.o"
 
@@ -140,6 +155,7 @@ main_EXTERNAL_OBJECTS =
 
 bin/main: CMakeFiles/main.dir/lib/bot/bot.c.o
 bin/main: CMakeFiles/main.dir/src/main.c.o
+bin/main: CMakeFiles/main.dir/src/path/path.c.o
 bin/main: CMakeFiles/main.dir/lib/archiver/archiver.cpp.o
 bin/main: CMakeFiles/main.dir/lib/pdf/pdf.cpp.o
 bin/main: CMakeFiles/main.dir/build.make
@@ -147,7 +163,7 @@ bin/main: CMakeFiles/main.dir/compiler_depend.ts
 bin/main: /usr/local/lib/libcurl.so.4.8.0
 bin/main: /usr/local/lib/libpodofo.so.1.1.0
 bin/main: CMakeFiles/main.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/rozmusel/dev/Black_box/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable bin/main"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/rozmusel/dev/Black_box/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Linking CXX executable bin/main"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
