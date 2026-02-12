@@ -66,6 +66,7 @@ typedef struct {
 	user_t user;
 	chat_t chat;
 	char* text;
+	char* caption;
 	document_t* document;
 } message_t;
 

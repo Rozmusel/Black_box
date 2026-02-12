@@ -225,11 +225,13 @@ static message_t parse_message(json_object* json_message) {
     chat_t chat = parse_chat(json_object_object_get(json_message, "chat"));
 
     const char* text = json_object_get_string(json_object_object_get(json_message, "text"));
+    const char* caption = json_object_get_string(json_object_object_get(json_message, "caption"));
 
     message_t message = {0};
     message.user = user;
     message.chat = chat;
     message.text = NULL;
+    message.caption = NULL;
     message.callback_data = NULL;
     message.callback_query_id = NULL;
     message.document = NULL;
@@ -239,6 +241,13 @@ static message_t parse_message(json_object* json_message) {
         message.text = malloc(text_size);
         if (message.text != NULL) memcpy(message.text, text, text_size);
         else printf("ERROR: Error during memory allocation for the message.text\n");
+    }
+
+    if (caption != NULL) {
+        const size_t caption_size = strlen(caption) + 1;
+        message.caption = malloc(caption_size);
+        if (message.caption != NULL) memcpy(message.caption, caption, caption_size);
+        else printf("ERROR: Error during memory allocation for the message.caption\n");
     }
 
     // Парсим документ, если есть

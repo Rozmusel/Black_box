@@ -47,22 +47,22 @@ void callback(BOT* bot, message_t message) {    // Обработка сообщ
                 return;
             }
             
-            if (message.text != NULL && strncmp(message.text, "/edit", 5) == 0) {
-                result = sscanf(message.text, "/edit %d", &number);
+            if (message.caption != NULL && strncmp(message.caption, "/edit", 5) == 0) {
+                result = sscanf(message.caption, "/edit %d", &number);
                 if(!result) {
                     bot_send_message(bot, message.chat.id, "ОШИБКА: Нераспознанная команда /edit", NoParseMode);
                     return;
                 } else {
-                    number = countdir(save_path) + 1;
                     if (number < 1){
                         bot_send_message(bot, message.chat.id, "ОШИБКА: Нарушение автосохранения", NoParseMode);
                         return;
                     }
                 }
+            } else {
+                number = countdir(save_path) + 1;
             }
             spot_type(file_type, message.document->file_name); 
             spot_subject(file_subject, message.document->file_name);
-            number = countdir(save_path) + 1;
             snprintf(edit_save_path, sizeof(edit_save_path), "%s/%s;%s_%d.pdf", save_path, file_type, file_subject, number); // Формируем полный путь сохранения
             result = bot_download_document(bot, message.document->file_id, edit_save_path);
             if (result) {
