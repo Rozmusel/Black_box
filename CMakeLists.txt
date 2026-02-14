@@ -102,5 +102,9 @@ endif()
 find_package(podofo REQUIRED)
 target_link_libraries(main PRIVATE podofo::podofo)
 
+# Link pthread library for asynchronous file sending
+find_package(Threads REQUIRED)
+target_link_libraries(main PRIVATE Threads::Threads)
+
 # Additional linker flags or libraries can be added here, e.g.:
 # target_link_libraries(main PRIVATE pthread)

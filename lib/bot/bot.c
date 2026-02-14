@@ -67,15 +67,16 @@ static int add_url_param_str(CURL* curl, char* url, size_t url_size, char* key, 
 	return 0;
 }
 
-static int add_inline_keyboard(CURL* curl, char* url, size_t url_size, const char** buttons, size_t button_count) {
+static int add_inline_keyboard(CURL* curl, char* url, size_t url_size, const char** buttons, const char** callback_data, size_t button_count) {
 	json_object* keyboard_markup = json_object_new_object();
 	json_object* keyboard = json_object_new_array();
 	for (size_t i = 0; i < button_count; ++i) {
 		json_object* button_row = json_object_new_array();
 		json_object* button = json_object_new_object();
 		json_object_object_add(button, "text", json_object_new_string(buttons[i]));
-        // Add callback_data to make it a valid inline keyboard button
-        json_object_object_add(button, "callback_data", json_object_new_string(buttons[i]));
+        // Use provided callback_data or fall back to button text
+        const char* cb_data = (callback_data != NULL) ? callback_data[i] : buttons[i];
+        json_object_object_add(button, "callback_data", json_object_new_string(cb_data));
 		json_object_array_add(button_row, button);
 		json_object_array_add(keyboard, button_row);
 	}
@@ -352,11 +353,19 @@ BOT* bot_create() {
 
 	bot->last_update_id = 0;
 
+	// Initialize mutex for thread-safe CURL operations
+	if (pthread_mutex_init(&bot->curl_mutex, NULL) != 0) {
+		printf("ERROR: Error during pthread_mutex_init\n");
+		bot_delete(bot);
+		return NULL;
+	}
+
 	return bot;
 }
 
 
 void bot_delete(BOT* bot) {
+	pthread_mutex_destroy(&bot->curl_mutex);
 	curl_easy_cleanup(bot->curl);
 	free(bot->token);
 	free(bot);
@@ -383,9 +392,12 @@ uint64_t bot_get_updates(BOT* bot, update_t* updates) {
 	CURLcode curl_code = CURLE_OK;
 	response_t buffer = { NULL, 0 };
 
+	pthread_mutex_lock(&bot->curl_mutex);
+
 	curl_code = curl_easy_setopt(bot->curl, CURLOPT_WRITEDATA, (void*)&buffer);
 	if (curl_code != CURLE_OK) {
 		printf("ERROR: Error during setting the curl flag CURLOPT_WRITEDATA (%s)\n", curl_easy_strerror(curl_code));
+		pthread_mutex_unlock(&bot->curl_mutex);
 		return 0;
 	}
 
@@ -404,6 +416,7 @@ uint64_t bot_get_updates(BOT* bot, update_t* updates) {
 	char* url = malloc(url_size);
 	if (url == NULL) {
 		printf("ERROR: Error during memory allocation for url\n");
+		pthread_mutex_unlock(&bot->curl_mutex);
 		return 0;
 	}
 
@@ -412,12 +425,14 @@ uint64_t bot_get_updates(BOT* bot, update_t* updates) {
 	if (add_url_param_uint(bot->curl, url, url_size, "offset", bot->last_update_id + 1)) {
 		printf("ERROR: Error while adding the 'offset' parameter to the request url\n");
 		free(url);
+		pthread_mutex_unlock(&bot->curl_mutex);
 		return 0;
 	}
 
 	if (add_url_param_uint(bot->curl, url, url_size, "timeout", 1)) {
 		printf("ERROR: Error while adding the 'timeout' parameter to the request url\n");
 		free(url);
+		pthread_mutex_unlock(&bot->curl_mutex);
 		return 0;
 	}
 
@@ -425,10 +440,14 @@ uint64_t bot_get_updates(BOT* bot, update_t* updates) {
 	if (curl_code != CURLE_OK) {
 		printf("ERROR: Error during setting the curl flag CURLOPT_URL (%s)\n", curl_easy_strerror(curl_code));
 		free(url);
+		pthread_mutex_unlock(&bot->curl_mutex);
 		return 0;
 	}
 
 	curl_code = curl_easy_perform(bot->curl);
+	
+	pthread_mutex_unlock(&bot->curl_mutex);
+	
 	if (curl_code != CURLE_OK) {
 		printf("ERROR: Error during https request execution (%s)\n", curl_easy_strerror(curl_code));
 		free(url);
@@ -569,99 +588,62 @@ int bot_send_message(BOT* bot, uint64_t chat_id, char* text, parse_mode_t parse_
   return 0;
 }
 
-int bot_send_message_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_mode, char* text, const char** buttons, size_t button_count) {
+int bot_send_message_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_mode, char* text, const char** buttons, const char** callback_data, size_t button_count) {
 	CURLcode curl_code = CURLE_OK;
-	int result = 0;
 	response_t buffer = { NULL, 0 };
 
-	curl_code = curl_easy_setopt(bot->curl, CURLOPT_WRITEDATA, (void*)&buffer);
-	if (curl_code != CURLE_OK) {
-		printf("ERROR: Error during setting the curl flag CURLOPT_WRITEDATA (%s)\n", curl_easy_strerror(curl_code));
-		return EBADMSG;
+	char url[512];
+	snprintf(url, sizeof(url), "https://api.telegram.org/bot%s/sendMessage", bot->token);
+
+	struct curl_httppost* form = NULL;
+	struct curl_httppost* last = NULL;
+
+	char chat_id_str[32];
+	snprintf(chat_id_str, sizeof(chat_id_str), "%llu", (unsigned long long)chat_id);
+
+	// Формируем JSON клавиатуры
+	json_object* keyboard_markup = json_object_new_object();
+	json_object* keyboard = json_object_new_array();
+	for (size_t i = 0; i < button_count; ++i) {
+		json_object* button_row = json_object_new_array();
+		json_object* button = json_object_new_object();
+		json_object_object_add(button, "text", json_object_new_string(buttons[i]));
+		const char* cb_data = (callback_data != NULL) ? callback_data[i] : buttons[i];
+		json_object_object_add(button, "callback_data", json_object_new_string(cb_data));
+		json_object_array_add(button_row, button);
+		json_object_array_add(keyboard, button_row);
 	}
+	json_object_object_add(keyboard_markup, "inline_keyboard", keyboard);
+	const char* keyboard_str = json_object_to_json_string(keyboard_markup);
 
-	char* encoded_text = curl_easy_escape(bot->curl, text, strlen(text));
-	if (encoded_text == NULL) {
-		printf("ERROR: Error during escaping of special characters\n");
-		return EBADMSG;
-	}
-	const uint64_t uint_param_count = 1;
-	const uint64_t str_param_count = 1;
-	const uint64_t param_count = uint_param_count + str_param_count + (parse_mode != NoParseMode ? 1 : 0);
-	const size_t url_size =
-		strlen("https://api.telegram.org/bot/?") +
-		strlen(bot->token) +
-		strlen("sendMessage") +
-		2 * param_count +
-		strlen("chat_id") +
-		strlen("text") +
-		(parse_mode != NoParseMode ? strlen("parse_mode") : 0) +
-		20 * uint_param_count +
-		strlen(encoded_text) +
-		(parse_mode != NoParseMode ? strlen(parse_modes[parse_mode]) : 0)
-		+ 1+ 1000; // extra space for the keyboard json
-	curl_free(encoded_text);
-
-	char* url = malloc(url_size);
-	if (url == NULL) {
-		printf("ERROR: Error during memory allocation for url\n");
-		return ENOMEM;
-	}
-
-	get_method_url(url, url_size, bot->token, "sendMessage");
-
-	result = add_url_param_uint(bot->curl, url, url_size, "chat_id", chat_id);
-	if (result != 0) {
-		printf("ERROR: Error while adding the 'chat_id' parameter to the request url\n");
-		free(url);
-		return result;
-	}
-
-	result = add_url_param_str(bot->curl, url, url_size, "text", text);
-	if (result != 0) {
-		printf("ERROR: Error while adding the 'text' parameter to the request url\n");
-		free(url);
-		return result;
-	}
-
+	curl_formadd(&form, &last, CURLFORM_COPYNAME, "chat_id", CURLFORM_COPYCONTENTS, chat_id_str, CURLFORM_END);
+	curl_formadd(&form, &last, CURLFORM_COPYNAME, "text", CURLFORM_COPYCONTENTS, text, CURLFORM_END);
 	if (parse_mode != NoParseMode) {
-		result = add_url_param_str(bot->curl, url, url_size, "parse_mode", parse_modes[parse_mode]);
-		if (result != 0) {
-			printf("ERROR: Error while adding the 'parse_mode' parameter to the request url\n");
-			free(url);
-			return result;
-		}
+		curl_formadd(&form, &last, CURLFORM_COPYNAME, "parse_mode", CURLFORM_COPYCONTENTS, parse_modes[parse_mode], CURLFORM_END);
 	}
+	curl_formadd(&form, &last, CURLFORM_COPYNAME, "reply_markup", CURLFORM_COPYCONTENTS, keyboard_str, CURLFORM_END);
 
-	result = add_inline_keyboard(bot->curl, url, url_size, buttons, button_count);
-	if (result != 0) {
-		printf("ERROR: Error while adding the 'reply_markup' parameter to the request url\n");
-		free(url);
-		return result;
-	}
-
-
-	curl_code = curl_easy_setopt(bot->curl, CURLOPT_URL, url);
-	if (curl_code != CURLE_OK) {
-		printf("ERROR: Error during setting the curl flag CURLOPT_URL (%s)\n", curl_easy_strerror(curl_code));
-		free(url);
-		return EBADMSG;
-	}
+	curl_easy_setopt(bot->curl, CURLOPT_URL, url);
+	curl_easy_setopt(bot->curl, CURLOPT_HTTPPOST, form);
+	curl_easy_setopt(bot->curl, CURLOPT_WRITEFUNCTION, write_callback);
+	curl_easy_setopt(bot->curl, CURLOPT_WRITEDATA, (void*)&buffer);
 
 	curl_code = curl_easy_perform(bot->curl);
+
+	curl_formfree(form);
+	json_object_put(keyboard_markup);
+
 	if (curl_code != CURLE_OK) {
 		printf("ERROR: Error during https request execution (%s)\n", curl_easy_strerror(curl_code));
-		free(url);
 		return EBADMSG;
 	}
-	free(url);
 
 	json_object* obj = json_tokener_parse(buffer.data);
-	if (json_object_get_boolean(json_object_object_get(obj, "ok")) == 0) {
+	if (!obj || json_object_get_boolean(json_object_object_get(obj, "ok")) == 0) {
 		int32_t error_code = json_object_get_int(json_object_object_get(obj, "error_code"));
 		const char* description = json_object_get_string(json_object_object_get(obj, "description"));
-		printf("ERROR: The response from the telegram server is false (%i - %s)\n", error_code, description);
-		json_object_put(obj);
+		printf("ERROR: The response from the telegram server is false (%i - %s)\n", error_code, description ? description : "");
+		if (obj) json_object_put(obj);
 		return EBADMSG;
 	}
 	json_object_put(obj);
@@ -675,9 +657,12 @@ int bot_answer_callback_query(BOT* bot, const char* callback_query_id, const cha
     response_t buffer = { NULL, 0 };
     int result = 0;
 
+    pthread_mutex_lock(&bot->curl_mutex);
+
     curl_code = curl_easy_setopt(bot->curl, CURLOPT_WRITEDATA, (void*)&buffer);
     if (curl_code != CURLE_OK) {
         printf("ERROR: Error during setting the curl flag CURLOPT_WRITEDATA (%s)\n", curl_easy_strerror(curl_code));
+        pthread_mutex_unlock(&bot->curl_mutex);
         return EBADMSG;
     }
 
@@ -696,6 +681,7 @@ int bot_answer_callback_query(BOT* bot, const char* callback_query_id, const cha
     char* url = malloc(url_size);
     if (url == NULL) {
         printf("ERROR: Error during memory allocation for url\n");
+        pthread_mutex_unlock(&bot->curl_mutex);
         return ENOMEM;
     }
 
@@ -705,6 +691,7 @@ int bot_answer_callback_query(BOT* bot, const char* callback_query_id, const cha
     if (result != 0) {
         printf("ERROR: Error while adding the 'callback_query_id' parameter to the request url\n");
         free(url);
+        pthread_mutex_unlock(&bot->curl_mutex);
         return result;
     }
 
@@ -713,6 +700,7 @@ int bot_answer_callback_query(BOT* bot, const char* callback_query_id, const cha
         if (result != 0) {
             printf("ERROR: Error while adding the 'text' parameter to the request url\n");
             free(url);
+            pthread_mutex_unlock(&bot->curl_mutex);
             return result;
         }
     }
@@ -721,10 +709,14 @@ int bot_answer_callback_query(BOT* bot, const char* callback_query_id, const cha
     if (curl_code != CURLE_OK) {
         printf("ERROR: Error during setting the curl flag CURLOPT_URL (%s)\n", curl_easy_strerror(curl_code));
         free(url);
+        pthread_mutex_unlock(&bot->curl_mutex);
         return EBADMSG;
     }
 
     curl_code = curl_easy_perform(bot->curl);
+    
+    pthread_mutex_unlock(&bot->curl_mutex);
+    
     if (curl_code != CURLE_OK) {
         printf("ERROR: Error during https request execution (%s)\n", curl_easy_strerror(curl_code));
         free(url);
@@ -811,6 +803,8 @@ int bot_send_file(BOT* bot, uint64_t chat_id, const char* text, const char* file
 		curl_formadd(&form, &last, CURLFORM_COPYNAME, "caption", CURLFORM_COPYCONTENTS, text, CURLFORM_END);
 	}
 
+	pthread_mutex_lock(&bot->curl_mutex);
+
 	curl_easy_setopt(bot->curl, CURLOPT_URL, url);
 	curl_easy_setopt(bot->curl, CURLOPT_HTTPPOST, form);
 	curl_easy_setopt(bot->curl, CURLOPT_WRITEFUNCTION, write_callback);
@@ -819,6 +813,8 @@ int bot_send_file(BOT* bot, uint64_t chat_id, const char* text, const char* file
 	curl_code = curl_easy_perform(bot->curl);
 
 	curl_formfree(form);
+
+	pthread_mutex_unlock(&bot->curl_mutex);
 
 	if (curl_code != CURLE_OK) {
 		printf("ERROR: Error during https request execution (%s)\n", curl_easy_strerror(curl_code));
@@ -838,7 +834,7 @@ int bot_send_file(BOT* bot, uint64_t chat_id, const char* text, const char* file
 	return 0;
 
 }
-int bot_send_photo_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_mode, const char* text, const char** buttons, size_t button_count, const char* photo_path) {
+int bot_send_photo_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_mode, const char* text, const char** buttons, const char** callback_data, size_t button_count, const char* photo_path) {
     CURLcode curl_code = CURLE_OK;
     response_t buffer = { NULL, 0 };
 
@@ -858,7 +854,8 @@ int bot_send_photo_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_
         json_object* button_row = json_object_new_array();
         json_object* button = json_object_new_object();
         json_object_object_add(button, "text", json_object_new_string(buttons[i]));
-        json_object_object_add(button, "callback_data", json_object_new_string(buttons[i]));
+        const char* cb_data = (callback_data != NULL) ? callback_data[i] : buttons[i];
+        json_object_object_add(button, "callback_data", json_object_new_string(cb_data));
         json_object_array_add(button_row, button);
         json_object_array_add(keyboard, button_row);
     }
@@ -883,6 +880,9 @@ int bot_send_photo_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_
     curl_code = curl_easy_perform(bot->curl);
 
     curl_formfree(form);
+    /* Clear previous multipart/form state to avoid affecting subsequent requests */
+    curl_easy_setopt(bot->curl, CURLOPT_HTTPPOST, NULL);
+
     json_object_put(keyboard_markup);
 
     if (curl_code != CURLE_OK) {
@@ -968,7 +968,11 @@ int bot_send_files_group(BOT* bot, uint64_t chat_id, const char* text, const cha
 	curl_easy_setopt(bot->curl, CURLOPT_WRITEDATA, (void*)&buffer);
 
 	curl_code = curl_easy_perform(bot->curl);
+
 	curl_formfree(form);
+	/* Clear previous multipart/form state to avoid affecting subsequent requests */
+	curl_easy_setopt(bot->curl, CURLOPT_HTTPPOST, NULL);
+
 	json_object_put(media_array);
 
 	if (curl_code != CURLE_OK) {

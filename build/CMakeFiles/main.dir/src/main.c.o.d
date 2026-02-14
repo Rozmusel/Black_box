@@ -21,8 +21,28 @@ CMakeFiles/main.dir/src/main.c.o: /home/rozmusel/dev/Black_box/src/main.c \
  /usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h \
  /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
  /usr/include/x86_64-linux-gnu/bits/floatn.h \
- /usr/include/x86_64-linux-gnu/bits/floatn-common.h /usr/include/locale.h \
+ /usr/include/x86_64-linux-gnu/bits/floatn-common.h /usr/include/ctype.h \
+ /usr/include/x86_64-linux-gnu/bits/endian.h \
+ /usr/include/x86_64-linux-gnu/bits/endianness.h /usr/include/locale.h \
  /usr/include/x86_64-linux-gnu/bits/locale.h /usr/include/string.h \
+ /usr/include/pthread.h /usr/include/sched.h \
+ /usr/include/x86_64-linux-gnu/bits/types/time_t.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_timespec.h \
+ /usr/include/time.h /usr/include/x86_64-linux-gnu/bits/time.h \
+ /usr/include/x86_64-linux-gnu/bits/types/clock_t.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_tm.h \
+ /usr/include/x86_64-linux-gnu/bits/sched.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_sched_param.h \
+ /usr/include/x86_64-linux-gnu/bits/cpu-set.h \
+ /usr/include/x86_64-linux-gnu/bits/pthreadtypes.h \
+ /usr/include/x86_64-linux-gnu/bits/thread-shared-types.h \
+ /usr/include/x86_64-linux-gnu/bits/pthreadtypes-arch.h \
+ /usr/include/x86_64-linux-gnu/bits/atomic_wide_counter.h \
+ /usr/include/x86_64-linux-gnu/bits/struct_mutex.h \
+ /usr/include/x86_64-linux-gnu/bits/struct_rwlock.h \
+ /usr/include/x86_64-linux-gnu/bits/setjmp.h \
+ /usr/include/x86_64-linux-gnu/bits/types/__sigset_t.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h \
  /home/rozmusel/dev/Black_box/lib/bot/bot.h /usr/include/errno.h \
  /usr/include/x86_64-linux-gnu/bits/errno.h /usr/include/linux/errno.h \
  /usr/include/x86_64-linux-gnu/asm/errno.h \
@@ -40,7 +60,6 @@ CMakeFiles/main.dir/src/main.c.o: /home/rozmusel/dev/Black_box/src/main.c \
  /usr/local/include/curl/system.h \
  /usr/include/x86_64-linux-gnu/sys/types.h \
  /usr/include/x86_64-linux-gnu/bits/types/clockid_t.h \
- /usr/include/x86_64-linux-gnu/bits/types/time_t.h \
  /usr/include/x86_64-linux-gnu/bits/types/timer_t.h \
  /usr/include/x86_64-linux-gnu/sys/socket.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_iovec.h \
@@ -50,23 +69,15 @@ CMakeFiles/main.dir/src/main.c.o: /home/rozmusel/dev/Black_box/src/main.c \
  /usr/include/x86_64-linux-gnu/bits/socket-constants.h \
  /usr/lib/gcc/x86_64-linux-gnu/15/include/limits.h \
  /usr/lib/gcc/x86_64-linux-gnu/15/include/syslimits.h \
- /usr/include/limits.h /usr/include/time.h \
- /usr/include/x86_64-linux-gnu/bits/time.h \
- /usr/include/x86_64-linux-gnu/bits/types/clock_t.h \
- /usr/include/x86_64-linux-gnu/bits/types/struct_tm.h \
- /usr/include/x86_64-linux-gnu/bits/types/struct_timespec.h \
- /usr/include/x86_64-linux-gnu/bits/endian.h \
- /usr/include/x86_64-linux-gnu/bits/endianness.h \
- /usr/include/x86_64-linux-gnu/sys/time.h \
+ /usr/include/limits.h /usr/include/x86_64-linux-gnu/sys/time.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h \
  /usr/include/x86_64-linux-gnu/sys/select.h \
  /usr/include/x86_64-linux-gnu/bits/select.h \
  /usr/include/x86_64-linux-gnu/bits/types/sigset_t.h \
- /usr/include/x86_64-linux-gnu/bits/types/__sigset_t.h \
  /usr/local/include/curl/easy.h /usr/local/include/curl/multi.h \
  /usr/local/include/curl/curl.h /usr/local/include/curl/urlapi.h \
  /usr/local/include/curl/options.h /usr/local/include/curl/header.h \
- /usr/local/include/curl/websockets.h /usr/local/include/curl/mprintf.h \
+ /usr/local/include/curl/websockets.h \
  /usr/local/include/curl/typecheck-gcc.h /usr/local/include/json-c/json.h \
  /usr/local/include/json-c/arraylist.h /usr/local/include/json-c/debug.h \
  /usr/local/include/json-c/json_c_version.h \

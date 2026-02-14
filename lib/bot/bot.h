@@ -7,6 +7,7 @@
 #include <string.h>
 #include <locale.h>
 #include <unistd.h> // sleep
+#include <pthread.h>
 
 #include <curl/curl.h>
 #include <json-c/json.h>
@@ -36,6 +37,7 @@ typedef struct {
 	CURL* curl;
 	char* token;
 	uint64_t last_update_id;
+	pthread_mutex_t curl_mutex;
 } BOT;
 
 
@@ -85,11 +87,11 @@ void bot_delete(BOT* bot);
 void bot_start(BOT* bot, void (*callback)(BOT*, message_t));
 uint64_t bot_get_updates(BOT* bot, update_t* updates);
 int bot_send_message(BOT* bot, uint64_t chat_id, char* text, parse_mode_t parse_mode);
-int bot_send_message_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_mode, char* text, const char** buttons, size_t button_count);
+int bot_send_message_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_mode, char* text, const char** buttons, const char** callback_data, size_t button_count);
 int bot_answer_callback_query(BOT* bot, const char* callback_query_id, const char* text);
 int bot_send_photo(BOT* bot, uint64_t chat_id, const char* text, const char* photo_path);
 int bot_send_file(BOT* bot, uint64_t chat_id, const char* text, const char* file_path);
-int bot_send_photo_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_mode, const char* text, const char** buttons, size_t button_count, const char* photo_path);
+int bot_send_photo_with_keyboard(BOT* bot, uint64_t chat_id, parse_mode_t parse_mode, const char* text, const char** buttons, const char** callback_data, size_t button_count, const char* photo_path);
 int bot_download_document(BOT* bot, const char* file_id, const char* save_path);
 int bot_send_files_group(BOT* bot, uint64_t chat_id, const char* text, const char** file_paths, size_t file_count);
 #endif // !_BOT_H_

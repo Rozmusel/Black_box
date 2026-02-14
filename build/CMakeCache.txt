@@ -346,6 +346,8 @@ CMAKE_GENERATOR_INSTANCE:INTERNAL=
 CMAKE_GENERATOR_PLATFORM:INTERNAL=
 //Name of generator toolset.
 CMAKE_GENERATOR_TOOLSET:INTERNAL=
+//Test CMAKE_HAVE_LIBC_PTHREAD
+CMAKE_HAVE_LIBC_PTHREAD:INTERNAL=1
 //Source directory with the top level CMakeLists.txt file for this
 // project
 CMAKE_HOME_DIRECTORY:INTERNAL=/home/rozmusel/dev/Black_box
@@ -419,6 +421,8 @@ CURL_DIR-ADVANCED:INTERNAL=1
 FIND_PACKAGE_MESSAGE_DETAILS_CURL:INTERNAL=[/usr/local/lib/cmake/CURL/CURLConfig.cmake][c ][v8.19.0-DEV()]
 //Details about finding PkgConfig
 FIND_PACKAGE_MESSAGE_DETAILS_PkgConfig:INTERNAL=[/usr/bin/pkg-config][v1.8.1()]
+//Details about finding Threads
+FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 JSONC_CFLAGS:INTERNAL=-I/usr/local/include;-I/usr/local/include/json-c
 JSONC_CFLAGS_I:INTERNAL=
 JSONC_CFLAGS_OTHER:INTERNAL=
