@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.10.2)
+project(black_box VERSION 0.1.0 LANGUAGES C CXX)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# enable_testing()
+
+add_subdirectory(src)

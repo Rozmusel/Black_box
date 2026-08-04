@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "configurePresets": [
+    {
+      "name": "default",
+      "inherits": "windows",
+      "environment": {
+        "VCPKG_ROOT": "<C:/Dev/vcpkg>"
+      }
+    }
+  ]
+}
