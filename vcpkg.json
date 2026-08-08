@@ -1,6 +1,7 @@
 {
   "dependencies": [
     "tgbot-cpp",
-    "sqlitecpp"
+    "sqlitecpp",
+    "spdlog"
   ]
 }

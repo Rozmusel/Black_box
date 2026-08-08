@@ -10,9 +10,9 @@ target_link_libraries(${PROJECT_NAME} TgBot::TgBot)
 find_package(SQLiteCpp CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} SQLiteCpp)
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${CMAKE_SOURCE_DIR}/media $<TARGET_FILE_DIR:${PROJECT_NAME}>/media)
+find_package(spdlog CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} spdlog::spdlog)
+
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy_directory
                        ${CMAKE_SOURCE_DIR}/database $<TARGET_FILE_DIR:${PROJECT_NAME}>/database)

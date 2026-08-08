@@ -7,57 +7,44 @@
 using namespace std;
 using namespace TgBot;
 
-InlineKeyboardMarkup::Ptr RowKeyboard(int count, ...) {
-    va_list args;
-    va_start(args, count);
+InlineKeyboardMarkup::Ptr RowKeyboard(const vector<string>& texts) {
     InlineKeyboardMarkup::Ptr keyboard(new InlineKeyboardMarkup);
     vector<InlineKeyboardButton::Ptr> row;
 
-    for (int i = 0; i < count; ++i) {
-        const char* buttonText = va_arg(args, const char*);
+    for (const auto& text : texts) {
         InlineKeyboardButton::Ptr button(new InlineKeyboardButton);
-        button->text = buttonText;
-        button->callbackData = buttonText;
+        button->text = text;
+        button->callbackData = text;
         row.push_back(button);
     }
     keyboard->inlineKeyboard.push_back(row);
-    va_end(args);
     return keyboard;
 }
 
-InlineKeyboardMarkup::Ptr ColKeyboard(int count, ...) {
-    va_list args;
-    va_start(args, count);
+InlineKeyboardMarkup::Ptr ColKeyboard(const vector<string>& texts) {
     InlineKeyboardMarkup::Ptr keyboard(new InlineKeyboardMarkup);
 
-    for (int i = 0; i < count; ++i) {
+    for (const auto& text : texts) {
         vector<InlineKeyboardButton::Ptr> row;
-        const char* buttonText = va_arg(args, const char*);
         InlineKeyboardButton::Ptr button(new InlineKeyboardButton);
-        button->text = buttonText;
-        button->callbackData = buttonText;
+        button->text = text;
+        button->callbackData = text;
         row.push_back(button);
         keyboard->inlineKeyboard.push_back(row);
     }
-    va_end(args);
     return keyboard;
 }
 
-InlineKeyboardMarkup::Ptr RowKeyboardExtended(int count, ...) {
-    va_list args;
-    va_start(args, count);
+InlineKeyboardMarkup::Ptr RowKeyboardExtended(const vector<pair<string,string>>& buttons) {
     InlineKeyboardMarkup::Ptr keyboard(new InlineKeyboardMarkup);
     vector<InlineKeyboardButton::Ptr> row;
 
-    for (int i = 0; i < count; ++i) {
-        const char* buttonText = va_arg(args, const char*);
-        const char* buttonCallback = va_arg(args, const char*);
-        InlineKeyboardButton::Ptr button(new InlineKeyboardButton);
-        button->text = buttonText;
-        button->callbackData = buttonCallback;
-        row.push_back(button);
+    for (const auto& button : buttons) {
+        InlineKeyboardButton::Ptr buttonPtr(new InlineKeyboardButton);
+        buttonPtr->text = button.first;
+        buttonPtr->callbackData = button.second;
+        row.push_back(buttonPtr);
     }
     keyboard->inlineKeyboard.push_back(row);
-    va_end(args);
     return keyboard;
 }

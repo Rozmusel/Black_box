@@ -1,5 +1,5 @@
 # Black Box
-![Logo](media/Black_box.png)
+![Logo](Black_box.png)
 
 Телеграмм бот для хранения лекций и семинаров и получения доступа к ним
 Бот размещён здесь @RZM_Black_box_bot

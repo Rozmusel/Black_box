@@ -7,6 +7,6 @@
 using namespace std;
 using namespace TgBot;
 
-InlineKeyboardMarkup::Ptr RowKeyboard(int count, ...);
-InlineKeyboardMarkup::Ptr ColKeyboard(int count, ...);
-InlineKeyboardMarkup::Ptr RowKeyboardExtended(int count, ...);
+InlineKeyboardMarkup::Ptr RowKeyboard(const vector<string>& texts);
+InlineKeyboardMarkup::Ptr ColKeyboard(const vector<string>& texts);
+InlineKeyboardMarkup::Ptr RowKeyboardExtended(const vector<pair<string,string>>& buttons);
