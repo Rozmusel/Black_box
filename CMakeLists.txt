@@ -5,6 +5,11 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if (MSVC)
+    add_compile_definitions(_WIN32_WINNT=0x0601 SPDLOG_COMPILED_LIB)
+    add_compile_options("/utf-8")
+endif()
+
 # enable_testing()
 
 add_subdirectory(src)

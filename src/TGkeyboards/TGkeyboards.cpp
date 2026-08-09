@@ -1,4 +1,5 @@
 #include "TGkeyboards.h"
+#include "spdlog/spdlog.h"
 
 #include <string>
 #include <utility>
@@ -8,6 +9,8 @@ using namespace std;
 using namespace TgBot;
 
 InlineKeyboardMarkup::Ptr RowKeyboard(const vector<string>& texts) {
+    spdlog::debug("Building row keyboard with {} buttons", texts.size());
+
     InlineKeyboardMarkup::Ptr keyboard(new InlineKeyboardMarkup);
     vector<InlineKeyboardButton::Ptr> row;
 
@@ -22,6 +25,8 @@ InlineKeyboardMarkup::Ptr RowKeyboard(const vector<string>& texts) {
 }
 
 InlineKeyboardMarkup::Ptr ColKeyboard(const vector<string>& texts) {
+    spdlog::debug("Building col keyboard with {} buttons", texts.size());
+
     InlineKeyboardMarkup::Ptr keyboard(new InlineKeyboardMarkup);
 
     for (const auto& text : texts) {
@@ -36,6 +41,8 @@ InlineKeyboardMarkup::Ptr ColKeyboard(const vector<string>& texts) {
 }
 
 InlineKeyboardMarkup::Ptr RowKeyboardExtended(const vector<pair<string,string>>& buttons) {
+    spdlog::debug("Building row extended keyboard with {} buttons", buttons.size());
+    
     InlineKeyboardMarkup::Ptr keyboard(new InlineKeyboardMarkup);
     vector<InlineKeyboardButton::Ptr> row;
 

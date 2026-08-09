@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iostream>
 #include <cstdarg>
 #include <tgbot/tgbot.h>
 

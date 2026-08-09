@@ -1,8 +1,12 @@
-add_executable(${PROJECT_NAME} main.cpp)
+set(BINARY_DIR "${CMAKE_BINARY_DIR}/bin")
+
+add_executable(${PROJECT_NAME} main.cpp MediaChange.cpp logging.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BINARY_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${BINARY_DIR}"
 )
+
 
 find_package(TgBot CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} TgBot::TgBot)
