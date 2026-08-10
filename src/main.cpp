@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <tgbot/tgbot.h>
+#include <tgbot/net/CurlHttpClient.h>
 #include <SQLiteCpp/SQLiteCpp.h>
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/daily_file_sink.h"
@@ -14,7 +15,7 @@
 
 #include "database/database.h"
 #include "TGkeyboards/TGkeyboards.h"
-#include "MediaChange.h"
+#include "TGPatches.h"
 #include "logging.h"
 
 #define ISUSERNEW 0     // удалить после добавления бд
@@ -34,18 +35,26 @@ enum class UserStatus
 
 int main()
 {
-    auto user_logs = spdlog::daily_logger_mt("user_logs", "logs/users/users.txt", 0, 0);    // Файл для записи сообщений от пользователей с ежедневной ротацией в 00:00
-    user_logs->set_pattern("[%Y-%m-%d %H:%M:%S] %v");   // Шаблон для записей в этом файле
+    auto user_logs = spdlog::daily_logger_mt("user_logs", "logs/users/users.txt", 0, 0); // Файл для записи сообщений от пользователей с ежедневной ротацией в 00:00
+    user_logs->set_pattern("[%Y-%m-%d %H:%M:%S] %v");                                    // Шаблон для записей в этом файле
 
-    multisink_logger("console", "logs/console.txt");    // Файл логов по умолчанию дублируется в терминал
+    multisink_logger("console", "logs/console.txt"); // Файл логов по умолчанию дублируется в терминал
 
     string token(getenv("TELEGRAM_BOT_TOKEN"));
-    if (token.empty()) {
+    if (token.empty())
+    {
         throw runtime_error("TELEGRAM_BOT_TOKEN environment variable is not set");
     }
-    Bot bot(token);
 
-    bot.getEvents().onAnyMessage([&bot, &user_logs](Message::Ptr message) {
+    CurlHttpClient curlHttpClient;
+
+    Bot bot(
+        token,
+        curlHttpClient,
+        "http://127.0.0.1:8081");
+
+    bot.getEvents().onAnyMessage([&bot, &user_logs](Message::Ptr message)
+                                 {
         try {
             user_logs->info("@{}: {}", message->from->username.c_str(), message->text.c_str());
             spdlog::info("@{}: {}", message->from->username, message->text.c_str());
@@ -57,15 +66,16 @@ int main()
                 "Добро пожаловать в обновлённую версию бота!\nБот стал быстрее и удобнее, а также получил новые функции.",
                 nullptr, keyboard, "Markdown"
                 );
+
             }
         }
         catch (exception &e) {
             bot.getApi().sendMessage(message->chat->id, "Возникла ошибка, попробуйте позже");
             spdlog::error(e.what());
-        }
-    });
+        } });
 
-    bot.getEvents().onCallbackQuery([&bot, &user_logs](CallbackQuery::Ptr query) {
+    bot.getEvents().onCallbackQuery([&bot, &user_logs](CallbackQuery::Ptr query)
+                                    {
         try {
         user_logs->info("@{}: {}", query->from->username.c_str(), query->data.c_str());
         spdlog::info("@{}: {}", query->from->username.c_str(), query->data.c_str());
@@ -78,7 +88,8 @@ int main()
                         "• Быстрая загрузка\n"
                         "• Возможность выбора интервала лекций\n"
                         "• Подписки\n"
-                        "• Уведомления об изменённых материалах"
+                        "• Уведомления об изменённых материалах\n"
+                        "• Альтернативные способы загрузки"
                     );
                     bot.getApi().sendDocument(query->message->chat->id, getMediaIdFromDatabase("degree"));
                     InlineKeyboardMarkup::Ptr keyboard = RowKeyboard({"Принять", "Отклонить"});
@@ -147,7 +158,8 @@ int main()
             break;
             case UserStatus::START:
                 if (query->data == "Лекции") {
-
+                    auto file_id = LoadFile("тест.pdf", "application/pdf");
+                    bot.getApi().sendDocument(query->message->chat->id, file_id);
                 }
                 if (query->data == "Семинары") {
 
@@ -167,7 +179,8 @@ int main()
                             "• Быстрая загрузка\n"
                             "• Возможность выбора интервала лекций\n"
                             "• Подписки\n"
-                            "• Уведомления об изменённых материалах";
+                            "• Уведомления об изменённых материалах\n"
+                            "• Альтернативные способы загрузки";
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
                     InputMediaPhoto::Ptr media = MessageMedia(query->message->chat->id, query->message->messageId,
                         getMediaIdFromDatabase("peter"), text, keyboard
@@ -215,8 +228,7 @@ int main()
     catch (exception &e) {
         bot.getApi().sendMessage(query->from->id, "Возникла ошибка, попробуйте позже");
         spdlog::error(e.what());
-    }
-    });
+    } });
     bot.getEvents().onCommand("start", [&bot](Message::Ptr message) { // Стартовое меню
         if (ISUSERNEW)
             return; // isUserNew(message->from->id)

@@ -1,6 +1,6 @@
 set(BINARY_DIR "${CMAKE_BINARY_DIR}/bin")
 
-add_executable(${PROJECT_NAME} main.cpp MediaChange.cpp logging.cpp)
+add_executable(${PROJECT_NAME} main.cpp TGPatches.cpp logging.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BINARY_DIR}"
@@ -9,6 +9,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 
 find_package(TgBot CONFIG REQUIRED)
+target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_CURL)
 target_link_libraries(${PROJECT_NAME} TgBot::TgBot)
 
 find_package(SQLiteCpp CONFIG REQUIRED)
