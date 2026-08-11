@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10.2)
-project(black_box VERSION 0.2.0 LANGUAGES C CXX)
+project(black_box VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
@@ -9,7 +9,5 @@ if (MSVC)
     add_compile_definitions(_WIN32_WINNT=0x0601 SPDLOG_COMPILED_LIB)
     add_compile_options("/utf-8")
 endif()
-
-# enable_testing()
 
 add_subdirectory(src)

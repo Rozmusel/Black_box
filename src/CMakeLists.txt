@@ -18,11 +18,7 @@ target_link_libraries(${PROJECT_NAME} SQLiteCpp)
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} spdlog::spdlog)
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${CMAKE_SOURCE_DIR}/database $<TARGET_FILE_DIR:${PROJECT_NAME}>/database)
-
-add_subdirectory(database)
+add_subdirectory(databasics)
 target_link_libraries(${PROJECT_NAME} database)
 
 add_subdirectory(TGkeyboards)
