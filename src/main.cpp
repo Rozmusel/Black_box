@@ -79,9 +79,10 @@ int main()
             spdlog::error(e.what());
         } });
 
-    bot.getEvents().onCallbackQuery([&bot, &user_logs, &bd](CallbackQuery::Ptr query)
+    bot.getEvents().onCallbackQuery([&bot, &user_logs, &bd, &token](CallbackQuery::Ptr query)
                                     {
         try {
+        bool callbackAnswered = false;
         user_logs->info("@{}: {}", query->from->username.c_str(), query->data.c_str());
         spdlog::info("@{}: {}", query->from->username.c_str(), query->data.c_str());
         switch (UserState(bd, query->from->id)) { // Статус пользователя (используется для дерева диалогов), сейчас стоит заглушка
@@ -163,8 +164,15 @@ int main()
             break;
             case START:
                 if (query->data == "Лекции") {
-                    //auto file_id = LoadFile("тест.pdf", "application/pdf");
-                    //bot.getApi().sendDocument(query->message->chat->id, file_id);
+                    bot.getApi().answerCallbackQuery(query->id, "Формируем файл и отправляем...");
+                    callbackAnswered = true;
+                    if (!SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
+                                                    query->message->chat->id,
+                                                    "тест.pdf",
+                                                    "application/pdf",
+                                                    "", "HTML")) {
+                        bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл через локальный сервер.");
+                    }
                 }
                 if (query->data == "Семинары") {
 
@@ -228,7 +236,9 @@ int main()
                 }
             break;
         }
-        bot.getApi().answerCallbackQuery(query->id); 
+        if (!callbackAnswered) {
+            bot.getApi().answerCallbackQuery(query->id);
+        }
     }
     catch (exception &e) {
         bot.getApi().sendMessage(query->from->id, "Возникла ошибка, попробуйте позже");

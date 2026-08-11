@@ -7,8 +7,10 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${BINARY_DIR}"
 )
 
-
-find_package(TgBot CONFIG REQUIRED)
+if(NOT TgBot_DIR)
+    set(TgBot_DIR "${CMAKE_SOURCE_DIR}/build/vcpkg_installed/x64-windows/share/tgbot-cpp" CACHE PATH "Path to TgBot config")
+endif()
+find_package(TgBot CONFIG REQUIRED PATHS "${TgBot_DIR}")
 target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_CURL)
 target_link_libraries(${PROJECT_NAME} TgBot::TgBot)
 
