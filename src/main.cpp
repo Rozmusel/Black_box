@@ -2,8 +2,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <iostream>
+#include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
+#include <filesystem>
 
 #include <tgbot/tgbot.h>
 #include <tgbot/net/CurlHttpClient.h>
@@ -21,13 +25,17 @@
 
 using namespace std;
 using namespace TgBot;
-using namespace SQLite;
+
+namespace fs = std::filesystem;
 
 enum UserStatus
 {
     REGISTRATION,
     START,
-    STUFF
+    LECTURE, 
+    SEMINAR,
+    SETTINGS,
+    ADMINISTRATION
 };
 enum UserAccess
 {
@@ -35,6 +43,53 @@ enum UserAccess
     PREMIUM,
     ADMIN
 };
+
+void handleConsoleCommand(Bot& bot, const std::string& line)
+{
+    std::istringstream iss(line);
+    std::string cmd;
+    iss >> cmd;
+
+    if (cmd == "help")
+    {
+        std::cout << "Available commands:\n";
+        std::cout << "  send \"user_id\" \"message\"\n";
+        return;
+    }
+
+    if (cmd == "send")
+    {
+        std::string userIdStr;
+        iss >> userIdStr;
+        if (userIdStr.empty())
+        {
+            std::cout << "Usage: send \"user_id\" \"message\"\n";
+            return;
+        }
+
+        std::string message;
+        std::getline(iss, message);
+        if (!message.empty() && message[0] == ' ')
+            message.erase(0, 1);
+
+        if (message.size() >= 2 && message.front() == '"' && message.back() == '"')
+        {
+            message = message.substr(1, message.size() - 2);
+        }
+
+        const long long userId = std::stoll(userIdStr);
+        auto msg =bot.getApi().sendMessage(userId, message);
+        spdlog::info("Sent message to user {}: {}", msg->chat->id, msg->text);
+        spdlog::info("Username: {} First Name: {} Last Name: {}", msg->chat->username, msg->chat->firstName, msg->chat->lastName);
+        std::cout << "Message sent to user " << userId << "\n";
+        return;
+    }
+
+    if (!cmd.empty())
+    {
+        std::cout << "Unknown command. Type help\n";
+    }
+}
 
 int main()
 {
@@ -57,22 +112,81 @@ int main()
     Bot bot(
         token,
         curlHttpClient,
-        "http://127.0.0.1:8081");
+        "http://127.0.0.1:8081"
+    );
+    #ifdef _WIN32
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+    #endif
+    std::thread consoleThread([&bot]()
+                              {
+        std::string line;
+        while (std::getline(std::cin, line))
+        {
+            if (line.empty())
+                continue;
+            try
+            {
+                handleConsoleCommand(bot, line);
+            }
+            catch (const std::exception& e)
+            {
+                std::cerr << "Command error: " << e.what() << "\n";
+            }
+        }
+    });
+    consoleThread.detach();
 
-    bot.getEvents().onAnyMessage([&bot, &user_logs, &bd](Message::Ptr message)
+    bot.getEvents().onAnyMessage([&bot, &user_logs, &bd, &token](Message::Ptr message)
                                  {
         try {
             user_logs->info("@{}: {}", message->from->username.c_str(), message->text.c_str());
             spdlog::info("@{}: {}", message->from->username, message->text.c_str());
-            if (UserState(bd, message->from->id, message->from->username) == 0) {
+            if (message->document != nullptr) {
+                const auto file = bot.getApi().getFile(message->document->fileId);
+                user_logs->info("@{} sended file: {}", message->chat->username, message->document->fileName);
+                spdlog::info("@{} file saved to {}", message->chat->username, file->filePath);
+
+                if (UserAccess(bd, message->from->id) == ADMIN && message->document->mimeType == "application/pdf") {
+                    subject sub(bd, message->document->fileName);
+                    string newFilePath = "files/" + getGroupName(bd, message->chat->id) + "/" + sub.name + " " + (sub.type == 0 ? "Лекция" : "Семинар") + " " + to_string(sub.count) + ".pdf";
+                    if (sub.count == 1) addGroupSubject(bd, sub.name, sub.type, getGroupName(bd, message->chat->id));
+                    if (!fs::exists(fs::u8path("files/" + getGroupName(bd, message->chat->id)))) {
+                        fs::create_directory(fs::u8path("files/" + getGroupName(bd, message->chat->id)));
+                    }
+                    fs::rename(fs::u8path(file->filePath), fs::u8path(newFilePath));
+                    string fileId = SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
+                                                                  message->chat->id,
+                                                                  newFilePath,
+                                                                  "application/pdf",
+                                                                  "", "HTML");
+                    if (fileId.empty()) {
+                        bot.getApi().sendMessage(message->chat->id, "Не удалось вернуть файл через локальный сервер");
+                    }
+                    sub.insert(bd, newFilePath, fileId);
+                } else {
+                    bot.getApi().sendMessage(message->chat->id, "Эмм... ладно, спасибо, я посмотрю на досуге");
+                }
+            }
+            if (message->photo.empty() == false) {
+                string fileId;
+                while (fileId.empty()) {
+                    fileId = bot.getApi().getFile(message->photo.back()->fileId)->filePath;
+                    user_logs->info("@{} sended photo: {}", message->chat->username, fileId);
+                    spdlog::info("File saved to {}", fileId);
+                }
+                bot.getApi().sendMessage(message->chat->id, "Эмм... ладно, спасибо, я посмотрю на досуге");
+            }
+            
+            if (UserState(bd, message->from->id, message->from->username) == REGISTRATION) {
                 InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Далее"});
                 bot.getApi().sendPhoto(message->chat->id, getMediaIdFromDatabase(bd , "logo"),
                 "Добро пожаловать в обновлённую версию бота!\nБот стал быстрее и удобнее, а также получил новые функции.",
                 nullptr, keyboard, "Markdown"
                 );
+                return;
             }
-            //const auto file = bot.getApi().getFile(message->document->fileId);
-            //spdlog::info("path: {}, id: {}", file->filePath, file->fileId);
+            
         }
         catch (exception &e) {
             bot.getApi().sendMessage(message->chat->id, "Возникла ошибка, попробуйте позже");
@@ -85,6 +199,11 @@ int main()
         bool callbackAnswered = false;
         user_logs->info("@{}: {}", query->from->username.c_str(), query->data.c_str());
         spdlog::info("@{}: {}", query->from->username.c_str(), query->data.c_str());
+        if (checkId(bd, query->from->id) == "") {
+            bot.getApi().answerCallbackQuery(query->id, "Предыдущие команды не работают, введите /start");
+            return;
+        }
+        if (query->data == "Назад" && UserState(bd, query->from->id) > START) setUserState(bd, query->from->id, START);
         switch (UserState(bd, query->from->id)) { // Статус пользователя (используется для дерева диалогов), сейчас стоит заглушка
             case REGISTRATION:
                 if (query->data == "Далее") {
@@ -95,7 +214,7 @@ int main()
                         "• Возможность выбора интервала лекций\n"
                         "• Подписки\n"
                         "• Уведомления об изменённых материалах\n"
-                        "• Альтернативные способы загрузки"
+                        "• Альтернативный способ загрузки"
                     );
                     bot.getApi().sendDocument(query->message->chat->id, getMediaIdFromDatabase(bd , "degree"));
                     InlineKeyboardMarkup::Ptr keyboard = RowKeyboard({"Принять", "Отклонить"});
@@ -128,7 +247,9 @@ int main()
                 }
                 
                 if (query->data == "Успех") {
-                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"СМ7-51Б", "СМ7-52Б", "Другая"});
+                    vector<string> buttons = getGroups(bd);
+                    buttons.push_back("Другая");
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
                     InputMediaPhoto::Ptr media = MessageMedia(query->message->chat->id, query->message->messageId,
                         getMediaIdFromDatabase(bd , "branch"), "В новой версии открываются филиалы.\n"
                         "Теперь вы можете выбрать свою группу, чтобы иметь материалы по вашей учебной программе", keyboard
@@ -151,7 +272,7 @@ int main()
                     );
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId, "", keyboard);
                 }
-                if (query->data.rfind("СМ7-5", 0) == 0) {
+                if (query->data.starts_with("СМ7-5")) {
                     setUserGroup(bd, query->from->id, query->data.c_str());  // добавляет пользователю выбнанную группу
                     setUserState(bd, query->from->id, 1);  // ставим статус общего меню с файлами
                     InputMediaPhoto::Ptr media = MessageMedia(query->message->chat->id, query->message->messageId,
@@ -164,27 +285,21 @@ int main()
             break;
             case START:
                 if (query->data == "Лекции") {
-                    bot.getApi().answerCallbackQuery(query->id, "Формируем файл и отправляем...");
-                    callbackAnswered = true;
-                    if (!SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
-                                                    query->message->chat->id,
-                                                    "тест.pdf",
-                                                    "application/pdf",
-                                                    "", "HTML")) {
-                        bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл через локальный сервер.");
-                    }
                 }
                 if (query->data == "Семинары") {
 
                 }
                 if (query->data == "Настройки") {
-                    vector<string> buttons = {"Уведомления"};
+                    setUserState(bd, query->from->id, SETTINGS);
+                    vector<string> buttons = {"Филиалы"};
                     string text = "Пользователь: @" + query->from->username + "\n";
                     if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {    // isUserPremium(message->from->id)
                         buttons.push_back("Подписки");
+                        buttons.push_back("Уведомления");
+                        buttons.push_back("Альтернативная загрузка");
                         text += "Статус: Premium\n Вам доступны все платные функции бота:\n";
                     } else {
-                        buttons.push_back("Premium");
+                        buttons.push_back("Премиум");
                         text += "Статус: Default\n Вам не доступны платные функции бота:\n";
                     }
                     buttons.push_back("Назад");
@@ -193,7 +308,7 @@ int main()
                             "• Возможность выбора интервала лекций\n"
                             "• Подписки\n"
                             "• Уведомления об изменённых материалах\n"
-                            "• Альтернативные способы загрузки";
+                            "• Альтернативный способ загрузки";
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
                     InputMediaPhoto::Ptr media = MessageMedia(query->message->chat->id, query->message->messageId,
                         getMediaIdFromDatabase(bd , "peter"), text, keyboard
@@ -201,6 +316,7 @@ int main()
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId, "", keyboard);
                 }
                 if (query->data == "Администраторская") {
+                    setUserState(bd, query->from->id, ADMINISTRATION);
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Удалить последний файл", "Изменить файл", "Логи", "Назад"});
                     InputMediaPhoto::Ptr media = MessageMedia(query->message->chat->id, query->message->messageId,
                         getMediaIdFromDatabase(bd , "admin"), "Панель управления ботом", keyboard
@@ -216,6 +332,52 @@ int main()
                     );
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId, "", keyboard);
                 }
+            break;
+            case LECTURE:
+            break;
+            case SEMINAR:
+            break;
+            case SETTINGS:
+                if (query->data == "Филиалы") {
+                    string text;
+                    vector<string> buttons = getGroups(bd);
+                    buttons.push_back("Назад");
+                    if (UserAccess(bd, query->message->chat->id) <= PREMIUM) {
+                        text = "Выберите филиал, к которому хотите присоединиться. Если вашей группы нет, но есть желающий покрывать разницу в программе, обратитесь ко мне @Rozmusel";
+                    } else {
+                        buttons.erase(remove(buttons.begin(), buttons.end(), getGroupName(bd, query->from->id)), buttons.end());
+                        text = "Здесь вы можете управлять списком предметов в своём филиале. Предметы, которые вы загрузили, появятся в списке вашей группы автоматически. Если вы хотите добавить предметы из другой группы, зайдите в гурппу и нажмите на предмет";
+                    }
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, text, "", keyboard);
+                }
+                if (query->data.starts_with("СМ7-5")) {
+                    string text;
+                    if(UserAccess(bd, query->message->chat->id) <= PREMIUM) {
+                        setUserGroup(bd, query->from->id, query->data.c_str());
+                        bot.getApi().answerCallbackQuery(query->id, "Вы присоединились к филиалу " + query->data);
+                    } else {
+                        vector<pair<string,string>> buttons = compareGroupsBySubjects(bd, getGroupName(bd, query->from->id), query->data);
+                        if (buttons.empty()) {
+                            text = "В этом филиале пока нет предметов";
+                        } else {
+                            text = "Выберите предмет, чтобы добавить";
+                        }
+                        buttons.push_back({"Назад", "Назад"});
+                        InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
+                        bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, text, "", keyboard);
+                    }
+                }
+                if (query->data.starts_with("delete") || query->data.starts_with("insert")) {
+                    executeCallback(bd, query->data);
+                    size_t end = query->data.rfind(':');
+                    size_t start = query->data.rfind(':', end - 1);
+                    string group_name = query->data.substr(start + 1, end - start - 1);
+                    vector<pair<string,string>> buttons = compareGroupsBySubjects(bd, getGroupName(bd, query->from->id), group_name);
+                    buttons.push_back({"Назад", "Назад"});
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите предмет, чтобы добавить", "", keyboard);
+                }
                 if (query->data == "Уведомления") {
 
                 }
@@ -225,14 +387,23 @@ int main()
                 if (query->data == "Премиум") {
 
                 }
+            break;
+            case ADMINISTRATION:
                 if (query->data == "Удалить последний файл") {
-
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended({{"Лекции", "Del:Lecture"}, {"Семинары", "Del:Seminar"}, {"Назад", "Назад"}});
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите тип файла для удаления", "", keyboard);
                 }
                 if (query->data == "Изменить файл") {
-
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended({{"Лекции", "Edit:Lecture"}, {"Семинары", "Edit:Seminar"}, {"Назад", "Назад"}});
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите тип файла для изменения", "", keyboard);
+                }
+                if (query->data.starts_with("Del:")) {
+                    //string type = query->data.substr(4);
+                    //int typeInt = (type == "Lecture") ? 0 : 1;
+                    
                 }
                 if (query->data == "Логи") {
-
+                    
                 }
             break;
         }
@@ -254,6 +425,7 @@ int main()
         bot.getApi().sendPhoto(message->chat->id, getMediaIdFromDatabase(bd, "start"),
                                "Выберите опцию",
                                nullptr, keyboard, "Markdown");
+        setUserState(bd, message->from->id, START);
     });
 
     signal(SIGINT, [](int s)

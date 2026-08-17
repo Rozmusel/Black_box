@@ -55,3 +55,19 @@ InlineKeyboardMarkup::Ptr RowKeyboardExtended(const vector<pair<string,string>>&
     keyboard->inlineKeyboard.push_back(row);
     return keyboard;
 }
+
+InlineKeyboardMarkup::Ptr ColKeyboardExtended(const vector<pair<string,string>>& buttons) {
+    spdlog::debug("Building col extended keyboard with {} buttons", buttons.size());
+
+    InlineKeyboardMarkup::Ptr keyboard(new InlineKeyboardMarkup);
+
+    for (const auto& button : buttons) {
+        vector<InlineKeyboardButton::Ptr> row;
+        InlineKeyboardButton::Ptr buttonPtr(new InlineKeyboardButton);
+        buttonPtr->text = button.first;
+        buttonPtr->callbackData = button.second;
+        row.push_back(buttonPtr);
+        keyboard->inlineKeyboard.push_back(row);
+    }
+    return keyboard;
+}

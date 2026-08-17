@@ -6,6 +6,7 @@
 #include <locale>
 #include <codecvt>
 #include <curl/curl.h>
+#include <windows.h>
 
 using namespace std;
 using namespace TgBot;
@@ -27,6 +28,56 @@ static size_t curlWriteCallback(void* contents, size_t size, size_t nmemb, void*
         response->append(static_cast<char*>(contents), totalSize);
     }
     return totalSize;
+}
+
+static std::string extractJsonString(const std::string& json, const std::string& key)
+{
+    std::string pattern = std::string("\"") + key + "\":\"";
+    auto pos = json.find(pattern);
+    if (pos == std::string::npos) {
+        return {};
+    }
+    pos += pattern.size();
+    std::string value;
+    value.reserve(64);
+    while (pos < json.size()) {
+        char c = json[pos++];
+        if (c == '"') {
+            break;
+        }
+        if (c == '\\' && pos < json.size()) {
+            char esc = json[pos++];
+            switch (esc) {
+                case '"': value.push_back('"'); break;
+                case '\\': value.push_back('\\'); break;
+                case '/': value.push_back('/'); break;
+                case 'b': value.push_back('\b'); break;
+                case 'f': value.push_back('\f'); break;
+                case 'n': value.push_back('\n'); break;
+                case 'r': value.push_back('\r'); break;
+                case 't': value.push_back('\t'); break;
+                default: value.push_back(esc); break;
+            }
+        } else {
+            value.push_back(c);
+        }
+    }
+    return value;
+}
+
+static bool extractJsonBool(const std::string& json, const std::string& key)
+{
+    std::string patternTrue = std::string("\"") + key + "\":true";
+    std::string patternFalse = std::string("\"") + key + "\":false";
+    auto posTrue = json.find(patternTrue);
+    auto posFalse = json.find(patternFalse);
+    if (posTrue != std::string::npos && (posFalse == std::string::npos || posTrue < posFalse)) {
+        return true;
+    }
+    if (posFalse != std::string::npos && (posTrue == std::string::npos || posFalse < posTrue)) {
+        return false;
+    }
+    return false;
 }
 
 static std::filesystem::path makePathFromString(const std::string& filePath)
@@ -97,13 +148,13 @@ static std::filesystem::path resolveExistingPath(const std::filesystem::path& pa
     return path;
 }
 
-bool SendDocumentViaLocalServer(const std::string& apiUrl,
-                                const std::string& token,
-                                long long chatId,
-                                const std::string& filePath,
-                                const std::string& mimeType,
-                                const std::string& caption,
-                                const std::string& parseMode)
+std::string SendDocumentViaLocalServer(const std::string& apiUrl,
+                                          const std::string& token,
+                                          long long chatId,
+                                          const std::string& filePath,
+                                          const std::string& mimeType,
+                                          const std::string& caption,
+                                          const std::string& parseMode)
 {
     std::filesystem::path path = makePathFromString(filePath);
     path = resolveExistingPath(path);
@@ -115,7 +166,7 @@ bool SendDocumentViaLocalServer(const std::string& apiUrl,
         } catch (...) {
             spdlog::error("Current working directory: <unable to convert>");
         }
-        return false;
+        return "";
     }
 
     std::filesystem::path absolutePath = std::filesystem::absolute(path);
@@ -125,7 +176,7 @@ bool SendDocumentViaLocalServer(const std::string& apiUrl,
     if (!curlInitialized) {
         if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
             spdlog::error("curl_global_init failed");
-            return false;
+            return std::string();
         }
         curlInitialized = true;
     }
@@ -133,7 +184,7 @@ bool SendDocumentViaLocalServer(const std::string& apiUrl,
     CURL* curl = curl_easy_init();
     if (!curl) {
         spdlog::error("curl_easy_init failed");
-        return false;
+        return std::string();
     }
 
     std::string requestUrl = apiUrl;
@@ -154,7 +205,7 @@ bool SendDocumentViaLocalServer(const std::string& apiUrl,
     if (!mime) {
         spdlog::error("curl_mime_init failed");
         curl_easy_cleanup(curl);
-        return false;
+        return std::string();
     }
 
     curl_mimepart* part = curl_mime_addpart(mime);
@@ -192,9 +243,23 @@ bool SendDocumentViaLocalServer(const std::string& apiUrl,
         spdlog::debug("sendDocument local server response: {}", response);
     }
 
+    std::string fileId;
+    if (ok) {
+        if (!extractJsonBool(response, "ok")) {
+            spdlog::error("sendDocument response marked not ok: {}", response);
+        } else {
+            fileId = extractJsonString(response, "file_id");
+            if (fileId.empty()) {
+                spdlog::error("Failed to extract file_id from response: {}", response);
+            } else {
+                spdlog::info("SendDocumentViaLocalServer returned file_id: {}", fileId);
+            }
+        }
+    }
+
     curl_mime_free(mime);
     curl_easy_cleanup(curl);
-    return ok;
+    return fileId;
 }
 
 InputMediaPhoto::Ptr MessageMedia(int64_t chatId, int messageId, const string& mediaId, const string& caption, InlineKeyboardMarkup::Ptr keyboard) {
