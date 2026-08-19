@@ -506,6 +506,7 @@ int main()
     signal(SIGINT, [](int s)
            {
         spdlog::info("Завершение программы");
+        spdlog::default_logger()->flush();
         exit(0); });
 
     try

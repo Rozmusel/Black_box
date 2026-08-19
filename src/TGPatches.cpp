@@ -6,7 +6,9 @@
 #include <locale>
 #include <codecvt>
 #include <curl/curl.h>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 using namespace std;
 using namespace TgBot;
