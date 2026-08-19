@@ -1,4 +1,8 @@
 #include <string>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/sinks/basic_file_sink.h"
@@ -15,3 +19,23 @@ void multisink_logger(const string name, const string dir)
     logger->set_level(spdlog::level::debug);                                                                        // Вывод сообщений с уровнем debug и выше
     spdlog::set_default_logger(logger);                                                                             // Выбор логера по умолчанию
 }
+
+std::string stringDate(int hours_offset)
+{
+    std::ostringstream result;
+    const auto now = std::chrono::system_clock::now() + std::chrono::hours(hours_offset);
+    const std::time_t time = std::chrono::system_clock::to_time_t(now);
+
+    std::tm localTime{};
+
+    #ifdef _WIN32
+    localtime_s(&localTime, &time);
+    #else
+    localtime_r(&time, &localTime);
+    #endif
+
+    result << std::put_time(&localTime, "%Y-%m-%d");
+    spdlog::debug("Generated date string for '{}': {}", hours_offset, result.str());
+    return result.str();
+}
+

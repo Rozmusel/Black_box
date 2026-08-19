@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10.2)
-project(black_box VERSION 0.4.0 LANGUAGES C CXX)
+project(black_box VERSION 0.5.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)

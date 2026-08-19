@@ -22,7 +22,6 @@
 #include "TGPatches.h"
 #include "logging.h"
 
-
 using namespace std;
 using namespace TgBot;
 
@@ -32,7 +31,7 @@ enum UserStatus
 {
     REGISTRATION,
     START,
-    LECTURE, 
+    LECTURE,
     SEMINAR,
     SETTINGS,
     ADMINISTRATION
@@ -44,7 +43,7 @@ enum UserAccess
     ADMIN
 };
 
-void handleConsoleCommand(Bot& bot, const std::string& line)
+void handleConsoleCommand(Bot &bot, const std::string &line)
 {
     std::istringstream iss(line);
     std::string cmd;
@@ -78,7 +77,7 @@ void handleConsoleCommand(Bot& bot, const std::string& line)
         }
 
         const long long userId = std::stoll(userIdStr);
-        auto msg =bot.getApi().sendMessage(userId, message);
+        auto msg = bot.getApi().sendMessage(userId, message);
         spdlog::info("Sent message to user {}: {}", msg->chat->id, msg->text);
         spdlog::info("Username: {} First Name: {} Last Name: {}", msg->chat->username, msg->chat->firstName, msg->chat->lastName);
         std::cout << "Message sent to user " << userId << "\n";
@@ -112,12 +111,11 @@ int main()
     Bot bot(
         token,
         curlHttpClient,
-        "http://127.0.0.1:8081"
-    );
-    #ifdef _WIN32
+        "http://127.0.0.1:8081");
+#ifdef _WIN32
     SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
-    #endif
+#endif
     std::thread consoleThread([&bot]()
                               {
         std::string line;
@@ -133,8 +131,7 @@ int main()
             {
                 std::cerr << "Command error: " << e.what() << "\n";
             }
-        }
-    });
+        } });
     consoleThread.detach();
 
     bot.getEvents().onAnyMessage([&bot, &user_logs, &bd, &token](Message::Ptr message)
@@ -148,11 +145,20 @@ int main()
                 spdlog::info("@{} file saved to {}", message->chat->username, file->filePath);
 
                 if (UserAccess(bd, message->from->id) == ADMIN && message->document->mimeType == "application/pdf") {
-                    subject sub(bd, message->document->fileName);
+                    subject sub(bd, message->document->fileName, getGroupName(bd, message->chat->id));
+                    bool upd = !message->caption.empty() && message->caption.find_first_not_of("0123456789") == std::string::npos;
+                    if (upd == true) {
+                        spdlog::info("Updating file: {} count {}", message->document->fileName, message->caption);
+                        sub.count = stoi(message->caption);
+                    }
                     string newFilePath = "files/" + getGroupName(bd, message->chat->id) + "/" + sub.name + " " + (sub.type == 0 ? "Лекция" : "Семинар") + " " + to_string(sub.count) + ".pdf";
                     if (sub.count == 1) addGroupSubject(bd, sub.name, sub.type, getGroupName(bd, message->chat->id));
                     if (!fs::exists(fs::u8path("files/" + getGroupName(bd, message->chat->id)))) {
                         fs::create_directory(fs::u8path("files/" + getGroupName(bd, message->chat->id)));
+                    }
+                    if (fs::exists(fs::u8path(newFilePath))) {
+                        spdlog::info("File already exists, removing: {}", newFilePath);
+                        fs::remove(fs::u8path(newFilePath));
                     }
                     fs::rename(fs::u8path(file->filePath), fs::u8path(newFilePath));
                     string fileId = SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
@@ -163,7 +169,13 @@ int main()
                     if (fileId.empty()) {
                         bot.getApi().sendMessage(message->chat->id, "Не удалось вернуть файл через локальный сервер");
                     }
-                    sub.insert(bd, newFilePath, fileId);
+                    if (upd == false) {
+                        sub.insert(bd, newFilePath, fileId, getGroupName(bd, message->chat->id));
+                        bot.getApi().sendMessage(message->chat->id, "Файл успешно добавлен в базу данных");
+                    } else {
+                        sub.update(bd, fileId, newFilePath, getGroupName(bd, message->chat->id));
+                        bot.getApi().sendMessage(message->chat->id, "Файл успешно обновлён в базе данных");
+                    }
                 } else {
                     bot.getApi().sendMessage(message->chat->id, "Эмм... ладно, спасибо, я посмотрю на досуге");
                 }
@@ -394,16 +406,79 @@ int main()
                     bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите тип файла для удаления", "", keyboard);
                 }
                 if (query->data == "Изменить файл") {
-                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended({{"Лекции", "Edit:Lecture"}, {"Семинары", "Edit:Seminar"}, {"Назад", "Назад"}});
-                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите тип файла для изменения", "", keyboard);
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Назад"});
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Чтобы изменить загруженный файл, одним сообщением пришлите новый файл и номер", "", keyboard);
                 }
                 if (query->data.starts_with("Del:")) {
-                    //string type = query->data.substr(4);
-                    //int typeInt = (type == "Lecture") ? 0 : 1;
-                    
+                    vector<pair<string,string>> buttons = delSubjectsByFiles(bd, query->data.substr(4), getGroupName(bd, query->from->id));
+                    buttons.push_back({"Назад", "Назад"});
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите предмет последняя запись которого будет удалена", "", keyboard);
+                }
+                if (query->data.starts_with("delete:")) {
+                    deleteLastSubject(bd, query->data.substr(7));
+                    size_t end = query->data.rfind(':');
+                    size_t start = query->data.rfind(':', end - 1);
+                    delSubjectsByFiles(bd, query->data.substr(start + 1, end - start - 1), getGroupName(bd, query->from->id));
+                    vector<pair<string,string>> buttons = delSubjectsByFiles(bd, query->data.substr(start + 1, end - start - 1), getGroupName(bd, query->from->id));
+                    buttons.push_back({"Назад", "Назад"});
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите предмет последняя запись которого будет удалена", "", keyboard);
                 }
                 if (query->data == "Логи") {
-                    
+                    vector<string> butt = {"Полные логи", "Пользовательский лог", "Назад"};
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(butt);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите лог для просмотра", "", keyboard);
+                }
+                if (query->data == "Полные логи") {
+                    spdlog::info("Sending full logs to user {}", query->from->username);
+                    spdlog::default_logger()->flush();
+                    SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
+                                               query->message->chat->id,
+                                               "logs/logs.txt", "text/plain");
+                }
+                if (query->data == "Пользовательский лог") {
+                    vector<string> butt = {"Сегодня", "Вчера", "Неделя", "Назад"};
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(butt);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите период для просмотра пользовательского лога", "", keyboard);
+                }
+                if (query->data == "Сегодня") {
+                    spdlog::info("Sending user logs for today to user {}", query->from->username);
+                    user_logs->flush();
+                    string filePath = "logs/users/users_" + stringDate(0) + ".txt";
+                    if (!fs::exists(fs::u8path(filePath))) {
+                        bot.getApi().sendMessage(query->message->chat->id, "Пользовательский лог за сегодня ещё не создан");
+                        return;
+                    }
+                    SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
+                                               query->message->chat->id,
+                                               filePath, "text/plain");
+                }
+                if (query->data == "Вчера") {
+                    spdlog::info("Sending user logs for yesterday to user {}", query->from->username);
+                    user_logs->flush();
+                    string filePath = "logs/users/users_" + stringDate(-24) + ".txt";
+                    if (!fs::exists(fs::u8path(filePath))) {
+                        bot.getApi().sendMessage(query->message->chat->id, "Пользовательский лог за вчера не найден");
+                        return;
+                    }
+                    SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
+                                               query->message->chat->id,
+                                               filePath, "text/plain");
+                }
+                if (query->data == "Неделя") {
+                    spdlog::info("Sending user logs for the last week to user {}", query->from->username);
+                    user_logs->flush();
+                    for (int i = 0; i < 7; i++) {
+                        string filePath = "logs/users/users_" + stringDate(-24 * (i + 1)) + ".txt";
+                        if (!fs::exists(fs::u8path(filePath))) {
+                            bot.getApi().sendMessage(query->message->chat->id, "Пользовательский лог за " + stringDate(-24 * (i + 1)) + " не найден");
+                            continue;
+                        }
+                        SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
+                                                   query->message->chat->id,
+                                                   filePath, "text/plain");
+                    }
                 }
             break;
         }
