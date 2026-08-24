@@ -5,7 +5,7 @@
       "name": "default",
       "inherits": "windows",
       "environment": {
-        "VCPKG_ROOT": "<C:/Dev/vcpkg>"
+        "VCPKG_ROOT": "C:/Dev/vcpkg"
       }
     }
   ]

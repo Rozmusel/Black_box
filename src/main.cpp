@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 #include <filesystem>
+#include <chrono>
 
 #include <tgbot/tgbot.h>
 #include <tgbot/net/CurlHttpClient.h>
@@ -21,6 +22,7 @@
 #include "TGkeyboards/TGkeyboards.h"
 #include "TGPatches.h"
 #include "logging.h"
+#include "pdf/pdf.h"
 
 using namespace std;
 using namespace TgBot;
@@ -34,7 +36,8 @@ enum UserStatus
     LECTURE,
     SEMINAR,
     SETTINGS,
-    ADMINISTRATION
+    ADMINISTRATION,
+    FEEDBACK
 };
 enum UserAccess
 {
@@ -97,6 +100,9 @@ int main()
 
     multisink_logger("console", "logs/console.txt"); // Файл логов по умолчанию дублируется в терминал
 
+    auto feedback = spdlog::basic_logger_mt("feedback", "logs/feedback.txt");
+    feedback->set_pattern("[%Y-%m-%d %H:%M:%S] %v");
+
     Database bd("database/bot.db", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
     initDB(bd);
 
@@ -116,7 +122,7 @@ int main()
     SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
 #endif
-    std::thread consoleThread([&bot]()
+    thread consoleThread([&bot]()
                               {
         std::string line;
         while (std::getline(std::cin, line))
@@ -134,11 +140,65 @@ int main()
         } });
     consoleThread.detach();
 
-    bot.getEvents().onAnyMessage([&bot, &user_logs, &bd, &token](Message::Ptr message)
+    thread delayedFiles([&bot, &token]()
+                              {
+        Database workerDb(
+            "database/bot.db",
+            SQLite::OPEN_READWRITE
+        );
+
+        while (true) {
+            try {
+                spdlog::debug("Checking for delayed files to send. Current time: {}", chrono::duration_cast<chrono::minutes>(chrono::system_clock::now().time_since_epoch()).count());
+                const vector<pair<int64_t, string>> files = getDelayedFiles(workerDb);
+
+                for (const auto& file : files) {
+                    spdlog::info("Sending delayed file to user {}: {}", file.first, file.second);
+                    const string sentFileId = SendDocumentViaLocalServer(
+                        "http://127.0.0.1:8081",
+                        token,
+                        file.first,
+                        file.second,
+                        "application/pdf",
+                        "",
+                        "HTML"
+                    );
+
+                    if (!sentFileId.empty()) {
+                        deleteDelayedFile(workerDb, file.first, file.second);
+                        fs::remove(fs::u8path(file.second));
+                        spdlog::info("Sent delayed file to user {}: {}", file.first, file.second);
+                    }
+                }
+            }
+            catch (const exception& error)
+            {
+                spdlog::error(
+                    "Error in delayed files thread: {}",
+                    error.what()
+                );
+            }
+
+            this_thread::sleep_for(chrono::seconds(60));
+        }
+    });
+
+    bot.getEvents().onAnyMessage([&bot, &user_logs, &feedback, &bd, &token](Message::Ptr message)
                                  {
         try {
             user_logs->info("@{}: {}", message->from->username.c_str(), message->text.c_str());
             spdlog::info("@{}: {}", message->from->username, message->text.c_str());
+            if (UserState(bd, message->chat->id) == FEEDBACK) {
+                if (message->text.empty() == false) {
+                    feedback->info("@{}: {}", message->from->username.c_str(), message->text.c_str());
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Назад"});
+                    auto reaction = make_shared<ReactionTypeEmoji>();
+                    reaction->emoji = "✅";
+                    bot.getApi().setMessageReaction(message->chat->id, message->messageId, {reaction});
+                    bot.getApi().sendMessage(message->chat->id, "Спасибо за ваш отзыв!");
+                    return;
+                }
+            }
             if (message->document != nullptr) {
                 const auto file = bot.getApi().getFile(message->document->fileId);
                 user_logs->info("@{} sended file: {}", message->chat->username, message->document->fileName);
@@ -297,13 +357,22 @@ int main()
             break;
             case START:
                 if (query->data == "Лекции") {
+                    setUserState(bd, query->from->id, LECTURE);
+                    vector<pair<string,string>> buttons = getSubjectsByGroup(bd, getGroupName(bd, query->from->id), 0);
+                    buttons.push_back({"Назад", "Назад"});
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите лекцию", "", keyboard);
                 }
                 if (query->data == "Семинары") {
-
+                    setUserState(bd, query->from->id, SEMINAR);
+                    vector<pair<string,string>> buttons = getSubjectsByGroup(bd, getGroupName(bd, query->from->id), 1);
+                    buttons.push_back({"Назад", "Назад"});
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите семинар", "", keyboard);
                 }
                 if (query->data == "Настройки") {
                     setUserState(bd, query->from->id, SETTINGS);
-                    vector<string> buttons = {"Филиалы"};
+                    vector<string> buttons = {"Филиалы", "Отзывы"};
                     string text = "Пользователь: @" + query->from->username + "\n";
                     if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {    // isUserPremium(message->from->id)
                         buttons.push_back("Подписки");
@@ -346,6 +415,51 @@ int main()
                 }
             break;
             case LECTURE:
+            if (query->data._Starts_with("list:")){
+                string subject_name = query->data.substr(5, query->data.find(':', 5) - 5);
+                string group_name = query->data.substr(query->data.rfind(':') + 1);
+                int8_t count = getFileCount(bd, subject_name, 0, group_name);
+                vector<pair<string,string>> buttons;
+                for (int8_t i = 1; i <= count; i++) {
+                    buttons.push_back({subject_name + " " + "лекция" + " " + to_string(i), "download:" + to_string(i)});
+                }
+                if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
+                    buttons.push_back({"Все лекции", "all"});
+                    buttons.push_back({"Интервал лекций", "interval"});
+                    if (UserSubscription(bd, query->from->id)) {
+                        if (UserSubjectSubscription(bd, query->from->id, subject_name,  group_name, 0)) {
+                            buttons.push_back({"Отписаться от уведомлений", "unsubscribe"});
+                        } else {
+                            buttons.push_back({"Подписаться на уведомления", "subscribe"});
+                        }
+                    }
+                }
+                buttons.push_back({"Назад", "Назад"});
+                InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
+                string text = "лекция->" + subject_name + "->" + group_name;
+                bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, text, "", keyboard);
+            }
+            if (query->data._Starts_with("download:")) {
+                string subject_type = query->message->caption.substr(0, query->message->caption.find("->"));
+                string subject_name = query->message->caption.substr(query->message->caption.find("->") + 2, query->message->caption.rfind("->") - query->message->caption.find("->") - 2);
+                string group_name = query->message->caption.substr(query->message->caption.rfind("->") + 2);
+                int8_t count = stoi(query->data.substr(9));
+                if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
+                    if (UserAlternativeDownload(bd, query->from->id)) {
+                        bot.getApi().sendMessage(query->message->chat->id, "Заглушка");
+                    } else {
+                        string fileId = getFileId(bd, subject_name, 0, count, group_name);
+                        bot.getApi().sendDocument(query->message->chat->id, fileId);
+                    }
+                } else {
+                    bot.getApi().sendMessage(query->message->chat->id, "Файл будет отправлен через 5 минут");
+                    const int64_t scheduledAt = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now().time_since_epoch()).count() + 5;
+                    string path = getFilePath(bd, subject_name, 0, count, group_name);
+                    string outputPath = "temp/" + path;
+                    pdfAddWatermark(path, outputPath);
+                    setDelayedFile(bd, query->message->chat->id, outputPath, scheduledAt);
+                }
+            }
             break;
             case SEMINAR:
             break;
@@ -389,6 +503,14 @@ int main()
                     buttons.push_back({"Назад", "Назад"});
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
                     bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите предмет, чтобы добавить", "", keyboard);
+                }
+                if (query->data == "Отзывы") {
+                    setUserState(bd, query->message->chat->id, FEEDBACK);
+                    vector<string> buttons = {"Назад"};
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
+                    bot.getApi().editMessageMedia(MessageMedia(query->message->chat->id, query->message->messageId,
+                        getMediaIdFromDatabase(bd , "feedback"), "Напишите свой отзыв и отправьте сообщение. Я буду рад услышать конструктивную критику", keyboard
+                    ), query->message->chat->id, query->message->messageId, "", keyboard);
                 }
                 if (query->data == "Уведомления") {
 
@@ -448,6 +570,7 @@ int main()
                     string filePath = "logs/users/users_" + stringDate(0) + ".txt";
                     if (!fs::exists(fs::u8path(filePath))) {
                         bot.getApi().sendMessage(query->message->chat->id, "Пользовательский лог за сегодня ещё не создан");
+                        bot.getApi().answerCallbackQuery(query->id);
                         return;
                     }
                     SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
@@ -460,6 +583,7 @@ int main()
                     string filePath = "logs/users/users_" + stringDate(-24) + ".txt";
                     if (!fs::exists(fs::u8path(filePath))) {
                         bot.getApi().sendMessage(query->message->chat->id, "Пользовательский лог за вчера не найден");
+                        bot.getApi().answerCallbackQuery(query->id);
                         return;
                     }
                     SendDocumentViaLocalServer("http://127.0.0.1:8081", token,

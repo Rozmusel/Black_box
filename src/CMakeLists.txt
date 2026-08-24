@@ -7,10 +7,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${BINARY_DIR}"
 )
 
-if(NOT TgBot_DIR)
-    set(TgBot_DIR "${CMAKE_SOURCE_DIR}/build/vcpkg_installed/x64-windows/share/tgbot-cpp" CACHE PATH "Path to TgBot config")
-endif()
-find_package(TgBot CONFIG REQUIRED PATHS "${TgBot_DIR}")
+find_package(TgBot CONFIG REQUIRED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_CURL)
 target_link_libraries(${PROJECT_NAME} TgBot::TgBot)
 
@@ -25,3 +22,6 @@ target_link_libraries(${PROJECT_NAME} database)
 
 add_subdirectory(TGkeyboards)
 target_link_libraries(${PROJECT_NAME} TGkeyboards)
+
+add_subdirectory(pdf)
+target_link_libraries(${PROJECT_NAME} pdf)

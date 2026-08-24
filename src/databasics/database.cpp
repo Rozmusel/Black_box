@@ -38,6 +38,7 @@ subject::subject(Database &bd, string file_name, string group_name) {
         file_name.find("Лекция") == string::npos ? type = 1 : type = 0;
         count = getFileCount(bd, name, type, group_name);
         count++;
+        spdlog::info("Created subject: name='{}', type={}, count={}", name, type, count);
     }
 
     
@@ -99,7 +100,7 @@ void initDB(Database &db) {
         "access INTEGER DEFAULT 0, "
         "alter_download INTEGER DEFAULT 0, "
         "notification INTEGER DEFAULT 0, "
-        "subscrition INTEGER DEFAULT 0"
+        "subscription INTEGER DEFAULT 0"
         ")"
     );
     //db.exec(
@@ -120,12 +121,21 @@ void initDB(Database &db) {
         "name TEXT PRIMARY KEY"
         ")"
     );
+    db.exec(
+        "CREATE TABLE IF NOT EXISTS delays ("
+        "chat_id INTEGER, "
+        "file_path TEXT, "
+        "scheduled_at INTEGER DEFAULT 0,"
+        "PRIMARY KEY (chat_id, file_path)"
+        ")"
+    );
     for (const auto& group : getGroups(db)) {
         db.exec(
             "CREATE TABLE IF NOT EXISTS \"" + group + "\" ("
-            "subject_name TEXT PRIMARY KEY, "
+            "subject_name TEXT, "
             "type INTEGER, "
-            "group_name TEXT"
+            "group_name TEXT, "
+            "PRIMARY KEY (subject_name, type, group_name)"
             ")"
         );
     }
@@ -155,7 +165,13 @@ string getGroupName(Database &db, int64_t chat_id) {
 
 void addGroupSubject(Database &db, const string& name, int64_t type, const string& group_name) {
     spdlog::debug("Adding subject '{}' of type {} to group '{}'", name, type, group_name);
-    SQLite::Statement insert(db, "INSERT OR IGNORE INTO \"" + group_name + "\" (subject_name, type, group_name) VALUES (?, ?, ?)");
+
+    SQLite::Statement insert(
+        db,
+        "INSERT OR IGNORE INTO \"" + group_name +
+        "\" (subject_name, type, group_name) VALUES (?, ?, ?)"
+    );
+
     insert.bind(1, name);
     insert.bind(2, type);
     insert.bind(3, group_name);
@@ -172,12 +188,21 @@ vector<string> getGroups(Database &db) {
     return groups;
 }
 
-vector<string> getSubjectsByGroup(Database &db, const string& group_name) {
+vector<pair<string,string>> getSubjectsByGroup(Database &db, const string& group_name, int8_t type) {
     spdlog::debug("Fetching subjects for group '{}'", group_name);
-    SQLite::Statement query(db, "SELECT subject_name FROM \"" + group_name + "\"");
-    vector<string> subjects;
+    SQLite::Statement query(db, "SELECT subject_name, group_name FROM \"" + group_name + "\" WHERE type = ?");
+    query.bind(1, type);
+    vector<pair<string,string>> subjects;
+    string text;
+    string callback_data;
     while (query.executeStep()) {
-        subjects.push_back(query.getColumn(0).getString()+ " " + (query.getColumn(1).getInt() == 0 ? "Лекция" : "Семинар"));
+        if (query.getColumn(1).getString() == group_name) {
+            text = query.getColumn(0).getString() + " " + (type == 0 ? "Лекция" : "Семинар");
+        } else {
+            text = query.getColumn(0).getString() + " " + (type == 0 ? "Лекция" : "Семинар") + " (" + query.getColumn(1).getString() + ")";
+        }
+        callback_data = "list:" + query.getColumn(0).getString() + ":" + to_string(type) + ":" + query.getColumn(1).getString();
+        subjects.push_back({text, callback_data});
     }
     return subjects;
 }
@@ -299,4 +324,99 @@ void deleteLastSubject(Database &db, const string& callback_data) {
     delete_query.exec();
     filesystem::remove(filesystem::u8path("files/" + group_name + "/" + subject_name + " " + (type == "Lecture" ? "Лекция" : "Семинар") + " " + to_string(getFileCount(db, subject_name, type == "Lecture" ? 0 : 1, group_name) + 1) + ".pdf"));
     spdlog::debug("Deleted last file version of '{}' of type {} in group '{}'", subject_name, type, group_name);
+}
+
+int UserSubscription(Database &db, int64_t chat_id) {
+    spdlog::debug("Checking subscription status for chat_id {}", chat_id);
+    SQLite::Statement query(db, "SELECT subscription FROM users WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    if (query.executeStep()) {
+        return query.getColumn(0).getInt();
+    }
+    throw runtime_error("Chat not found");  
+}
+
+int UserSubjectSubscription(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type) {
+    return 0; // Заглушка
+}
+
+string getFileId(Database &db, const string& name, int8_t type, int8_t count, const string& group_name) {
+    spdlog::debug("Fetching file_id for '{}' of type {} with count {} in group '{}'", name, type, count, group_name);
+    SQLite::Statement query(db, "SELECT file_id FROM files WHERE name = ? AND type = ? AND group_name = ? AND count = ?");
+    query.bind(1, name);
+    query.bind(2, type);
+    query.bind(3, group_name);
+    query.bind(4, count);
+    if (query.executeStep()) {
+        return query.getColumn(0).getString();
+    }
+    throw runtime_error("File not found");
+}
+
+int UserAlternativeDownload(Database &db, int64_t chat_id) {
+    spdlog::debug("Checking alternative download status for chat_id {}", chat_id);
+    SQLite::Statement query(db, "SELECT alter_download FROM users WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    if (query.executeStep()) {
+        return query.getColumn(0).getInt();
+    }
+    throw runtime_error("Chat not found");
+}
+
+vector<pair<int64_t, string>> getDelayedFiles(Database &db) {
+    spdlog::debug("Fetching delayed files that are due to be sent. Current time: {}", chrono::duration_cast<chrono::minutes>(chrono::system_clock::now().time_since_epoch()).count());
+    SQLite::Statement query(
+        db,
+        "SELECT chat_id, file_path "
+        "FROM delays "
+        "WHERE scheduled_at > 0 "
+        "AND scheduled_at <= strftime('%s', 'now') / 60"
+    );
+
+    vector<pair<int64_t, string>> delayedFiles;
+
+    while (query.executeStep()) {
+        delayedFiles.push_back({
+            query.getColumn("chat_id").getInt64(),
+            query.getColumn("file_path").getString()
+        });
+    }
+    spdlog::debug("Found {} delayed files to send", delayedFiles.size());
+    return delayedFiles;
+}
+
+void deleteDelayedFile(Database &db, int64_t chat_id, const string& file_path) {
+    SQLite::Statement delete_query(
+        db,
+        "DELETE FROM delays WHERE chat_id = ? AND file_path = ?"
+    );
+    delete_query.bind(1, chat_id);
+    delete_query.bind(2, file_path);
+    delete_query.exec();
+    spdlog::debug("Deleted delayed file '{}' for chat_id {}", file_path, chat_id);
+}
+
+string getFilePath(Database &db, const string& name, int8_t type, int8_t count, const string& group_name) {
+    spdlog::debug("Fetching file path for '{}' of type {} with count {} in group '{}'", name, type, count, group_name);
+    SQLite::Statement query(db, "SELECT file_path FROM files WHERE name = ? AND type = ? AND group_name = ? AND count = ?");
+    query.bind(1, name);
+    query.bind(2, type);
+    query.bind(3, group_name);
+    query.bind(4, count);
+    if (query.executeStep()) {
+        return query.getColumn(0).getString();
+    }
+    throw runtime_error("File path not found");
+}
+
+void setDelayedFile(Database &db, int64_t chat_id, const string& file_path, int64_t scheduled_at) {
+    SQLite::Statement insert_query(
+        db,
+        "INSERT OR REPLACE INTO delays (chat_id, file_path, scheduled_at) VALUES (?, ?, ?)"
+    );
+    insert_query.bind(1, chat_id);
+    insert_query.bind(2, file_path);
+    insert_query.bind(3, scheduled_at);
+    insert_query.exec();
+    spdlog::debug("Set delayed file '{}' for chat_id {} with scheduled time {}", file_path, chat_id, scheduled_at);
 }

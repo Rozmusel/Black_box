@@ -1,5 +1,5 @@
 # Black Box
-![Logo](Black_box.png)
+![Logo](media/Black_box.png)
 
 ![Version](https://img.shields.io/github/v/tag/Rozmusel/Black_box)
 ![License](https://img.shields.io/github/license/Rozmusel/Black_box)
@@ -12,7 +12,7 @@
 - [x] Локальный ТГ сервер
 - [x] Регистрация пользователей
 - [x] Загрузка материалов
-- [ ] Скачивание размещённых материалов
+- [x] Скачивание размещённых материалов
 - [ ] Скачивание интервалов и полного списка
 - [ ] Настройки
 - [x] Администраторская
@@ -50,4 +50,4 @@ cmake --build build
 telegram-bot-api --local --api-id=<api_id> --api-hash=<api_hash> --dir=<path_to_files>
 ```
 
-![Logo](logo.png)
+![Logo](media/logo.png)

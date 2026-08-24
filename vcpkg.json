@@ -2,6 +2,7 @@
   "dependencies": [
     "tgbot-cpp",
     "sqlitecpp",
-    "spdlog"
+    "spdlog",
+    "podofo"
   ]
 }

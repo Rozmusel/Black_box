@@ -20,6 +20,7 @@ namespace TgBot
     const std::string InputMediaAnimation::TYPE = "animation";
     const std::string InputMediaAudio::TYPE = "audio";
     const std::string InputMediaDocument::TYPE = "document";
+    const std::string ReactionTypeEmoji::TYPE = "emoji";
 }
 
 static size_t curlWriteCallback(void* contents, size_t size, size_t nmemb, void* userdata)
