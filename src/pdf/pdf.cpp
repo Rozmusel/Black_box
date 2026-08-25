@@ -8,7 +8,7 @@
 using namespace PoDoFo;
 using namespace std;
 
-int pdfMerge(string file1, string file2, string output)
+int pdf2Merge(string file1, string file2, string output)
 {
     try {
         spdlog::debug("Merging files: {} and {} into {}", file1, file2, output);
@@ -17,6 +17,12 @@ int pdfMerge(string file1, string file2, string output)
         PdfMemDocument pdf2;
         pdf2.Load(file2);
         pdf1.GetPages().AppendDocumentPages(pdf2);
+        if (std::filesystem::exists(std::filesystem::u8path(output))) {
+            std::filesystem::remove(std::filesystem::u8path(output));
+        }
+        if (!std::filesystem::exists(std::filesystem::u8path(output).parent_path())) {
+            std::filesystem::create_directories(std::filesystem::u8path(output).parent_path());
+        }
         pdf1.Save(output);
     } catch (const PdfError &e) {
         spdlog::error("Ошибка PoDoFo: {}", e.what());
@@ -78,6 +84,28 @@ int pdfAddWatermark(string file, string output)
     catch (exception& err)
     {
         spdlog::error("Error: {}", err.what());
+        return 1;
+    }
+}
+
+int pdfMerge(const std::vector<std::string>& files, const std::string& output)
+{
+    try {
+        PdfMemDocument merged;
+        for (const auto& file : files) {
+            PdfMemDocument next;
+            next.Load(file);
+            merged.GetPages().AppendDocumentPages(next);
+        }
+
+        const filesystem::path outputPath = filesystem::u8path(output);
+        filesystem::create_directories(outputPath.parent_path());
+        merged.Save(output);
+
+        return 0;
+    }
+    catch (const PdfError& error) {
+        spdlog::error("Ошибка PoDoFo: {}", error.what());
         return 1;
     }
 }

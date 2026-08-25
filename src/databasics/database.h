@@ -1,7 +1,6 @@
 #pragma once
 
 #include <SQLiteCpp/SQLiteCpp.h>
-#include <optional>
 
 using namespace std;
 using namespace SQLite;
@@ -20,7 +19,7 @@ class subject {
 
 string getMediaIdFromDatabase(Database &db, const string& name);
 
-int UserState(Database &db, int64_t chat_id, optional<string> username = nullopt);
+int UserState(Database &db, int64_t chat_id);
 void setUserState(Database &db, int64_t chat_id, int8_t state);
 int UserAccess(Database &db, int64_t chat_id);
 void setUserGroup(Database &db, int64_t chat_id, const string& group);
@@ -43,3 +42,6 @@ vector<pair<int64_t,string>> getDelayedFiles(Database &db);
 void deleteDelayedFile(Database &db, int64_t chat_id, const string& file_path);
 string getFilePath(Database &db, const string& name, int8_t type, int8_t count, const string& group_name);
 void setDelayedFile(Database &db, int64_t chat_id, const string& file_path, int64_t scheduled_at);
+int addUser(Database &db, int64_t chat_id, const string& username);
+int64_t getLastMenuMessageId(Database &db, int64_t chat_id);
+void setLastMenuMessageId(Database &db, int64_t chat_id, int64_t message_id);

@@ -1,6 +1,5 @@
 #include <SQLiteCpp/SQLiteCpp.h>
 #include "spdlog/spdlog.h"
-#include <optional>
 #include "database.h"
 #include <filesystem>
 
@@ -51,17 +50,22 @@ string getMediaIdFromDatabase(Database &db, const string& name) {
         throw runtime_error("No file_id found for '" + name + "'");
 }
 
-int UserState(Database &db, int64_t chat_id, optional<string> username) {
+int addUser(Database &db, int64_t chat_id, const string& username) {
+    SQLite::Statement query(db, "INSERT INTO users (chat_id, username) VALUES (?, ?)");
+    query.bind(1, chat_id);
+    query.bind(2, username);
+    query.exec();
+    spdlog::info("Added new user: {}", username);
+    return 0;
+}
+
+int UserState(Database& db, int64_t chat_id) {
     SQLite::Statement query(db, "SELECT state FROM users WHERE chat_id = ?");
     query.bind(1, chat_id);
-    if (query.executeStep()) return query.getColumn(0);
-
-    SQLite::Statement insert(db, "INSERT INTO Users(chat_id, username) VALUES(?, ?)");
-    insert.bind(1, chat_id);
-    if (username) insert.bind(2, username.value());
-    insert.exec();
-    spdlog::info("New user added: @{}", username.value());
-    return 0;
+    if (query.executeStep()) {
+        return query.getColumn(0).getInt();
+    }
+    throw runtime_error("Chat not found");
 }
 
 int UserAccess(Database &db, int64_t chat_id) {
@@ -100,7 +104,8 @@ void initDB(Database &db) {
         "access INTEGER DEFAULT 0, "
         "alter_download INTEGER DEFAULT 0, "
         "notification INTEGER DEFAULT 0, "
-        "subscription INTEGER DEFAULT 0"
+        "subscription INTEGER DEFAULT 0, "
+        "last_menu_message_id INTEGER DEFAULT 0"
         ")"
     );
     //db.exec(
@@ -139,6 +144,11 @@ void initDB(Database &db) {
             ")"
         );
     }
+    try {
+        db.exec("ALTER TABLE users ADD COLUMN last_menu_message_id INTEGER");
+    } catch (const SQLite::Exception&) {
+        // Поле уже существует
+}
 }
 
 int8_t getFileCount(Database &db, const string& name, int8_t type, const string& group_name) {
@@ -209,16 +219,34 @@ vector<pair<string,string>> getSubjectsByGroup(Database &db, const string& group
 
 vector<pair<string,string>> compareGroupsBySubjects(Database &db, const string& main_group, const string& side_group) {
     spdlog::debug("Comparing groups '{}' and '{}'", main_group, side_group);
-    SQLite::Statement query(db, "SELECT \"" + side_group + "\".*, EXISTS (SELECT 1 FROM \"" + main_group + "\" WHERE \"" + side_group + "\".subject_name = \"" + main_group + "\".subject_name AND \"" + side_group + "\".type = \"" + main_group + "\".type AND \"" + side_group + "\".group_name = \"" + main_group + "\".group_name) AS exists_in_main FROM \"" + side_group + "\"");
+    SQLite::Statement query(
+    db,
+    "SELECT side.*, "
+    "EXISTS ("
+        "SELECT 1 "
+        "FROM \"" + main_group + "\" AS main "
+        "WHERE main.group_name <> ? "
+        "AND main.subject_name = side.subject_name "
+        "AND main.type = side.type"
+    ") AS exists_in_main "
+    "FROM \"" + side_group + "\" AS side "
+    "WHERE side.group_name = ?"
+);
+
+query.bind(1, main_group);
+query.bind(2, side_group);
     vector<pair<string,string>> subjects;
     while (query.executeStep()) {
         bool exists = query.getColumn("exists_in_main").getInt() == 1;
-        string text = query.getColumn("subject_name").getString() + " " + (query.getColumn("type").getInt() == 0 ? "Лекция" : "Семинар");
-        if (exists) {
-            subjects.push_back({"✅ " + text, "delete:" + query.getColumn("subject_name").getString() + ":" + to_string(query.getColumn("type").getInt()) + ":" + query.getColumn("group_name").getString() + ":" + main_group});
-        } else {
-            subjects.push_back({"⬜ " + text, "insert:" + query.getColumn("subject_name").getString() + ":" + to_string(query.getColumn("type").getInt()) + ":" + query.getColumn("group_name").getString() + ":" + main_group});
-        }
+
+        string subjectName = query.getColumn("subject_name").getString();
+        string type = to_string(query.getColumn("type").getInt());
+
+        string text = subjectName + " " + (query.getColumn("type").getInt() == 0 ? "Лекция" : "Семинар");
+
+        string callbackData = (exists ? "delete:" : "insert:") + subjectName + ":" + type + ":" + side_group + ":" + main_group;
+
+        subjects.push_back({(exists ? "✅ " : "⬜ ") + text, callbackData});
     }
     return subjects;
 }
@@ -419,4 +447,22 @@ void setDelayedFile(Database &db, int64_t chat_id, const string& file_path, int6
     insert_query.bind(3, scheduled_at);
     insert_query.exec();
     spdlog::debug("Set delayed file '{}' for chat_id {} with scheduled time {}", file_path, chat_id, scheduled_at);
+}
+
+int64_t getLastMenuMessageId(Database &db, int64_t chat_id) {
+    spdlog::debug("Fetching last menu message ID for chat_id {}", chat_id);
+    SQLite::Statement query(db, "SELECT last_menu_message_id FROM users WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    if (query.executeStep()) {
+        return query.getColumn(0).getInt64();
+    }
+    throw runtime_error("Chat not found");
+}
+
+void setLastMenuMessageId(Database &db, int64_t chat_id, int64_t message_id) {
+    spdlog::debug("Setting last menu message ID {} for chat_id {}", message_id, chat_id);
+    SQLite::Statement update_query(db, "UPDATE users SET last_menu_message_id = ? WHERE chat_id = ?");
+    update_query.bind(1, message_id);
+    update_query.bind(2, chat_id);
+    update_query.exec();
 }
