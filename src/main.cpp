@@ -23,6 +23,7 @@
 #include "TGPatches.h"
 #include "logging.h"
 #include "pdf/pdf.h"
+#include "YaDisk/YaDisk.h"
 
 using namespace std;
 using namespace TgBot;
@@ -110,6 +111,10 @@ int main()
     if (token.empty())
     {
         throw runtime_error("TELEGRAM_BOT_TOKEN environment variable is not set");
+    }
+    string YaToken = std::getenv("YADISK_TOKEN");
+    if (YaToken.empty()) {
+        throw runtime_error("YADISK_TOKEN environment variable is not set");
     }
 
     CurlHttpClient curlHttpClient;
@@ -273,7 +278,7 @@ int main()
             spdlog::error(e.what());
         } });
 
-    bot.getEvents().onCallbackQuery([&bot, &user_logs, &bd, &token](CallbackQuery::Ptr query) {
+    bot.getEvents().onCallbackQuery([&bot, &user_logs, &bd, &token, &YaToken](CallbackQuery::Ptr query) {
         try {
         bool callbackAnswered = false;
         user_logs->info("{}: {}", query->from->username.c_str(), query->data.c_str());
@@ -392,6 +397,11 @@ int main()
                     if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {    // isUserPremium(message->from->id)
                         buttons.push_back("Подписки");
                         buttons.push_back("Уведомления");
+                        if (UserAlternativeDownload(bd, query->from->id)) {
+                            buttons.push_back("✅ Альтернативная загрузка");
+                        } else {
+                            buttons.push_back("⬜ Альтернативная загрузка");
+                        }
                         buttons.push_back("Альтернативная загрузка");
                         text += "Статус: Premium\n Вам доступны все платные функции бота:\n";
                     } else {
@@ -469,7 +479,10 @@ int main()
                 int8_t count = stoi(query->data.substr(9));
                 if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
                     if (UserAlternativeDownload(bd, query->from->id)) {
-                        bot.getApi().sendMessage(query->message->chat->id, "Заглушка");
+                        string filePath = getFilePath(bd, subject_name, fileType, count, group_name);
+                        string YaPath = "app:/" + group_name + " " + subject_name + " " + subject_type + " " + to_string(count) + ".pdf";
+                        string publicLink = uploadFileToYandexDisk(YaToken, filePath, YaPath);
+                        bot.getApi().sendMessage(query->message->chat->id, "Ссылка на скачивание: " + publicLink);
                     } else {
                         string fileId = getFileId(bd, subject_name, fileType, count, group_name);
                         bot.getApi().sendDocument(query->message->chat->id, fileId);
@@ -668,6 +681,35 @@ int main()
                 }
                 if (query->data == "Подписки") {
 
+                }
+                if (query->data.find("Альтернативная загрузка") != string::npos) {
+                    spdlog::info("User {} toggled alternative download", query->from->username);
+                    changeUserAlternativeDownload(bd, query->from->id);
+                    vector<string> buttons = {"Филиалы", "Отзывы"};
+                    string text = "Пользователь: @" + query->from->username + "\n";
+                    if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {    // isUserPremium(message->from->id)
+                        buttons.push_back("Подписки");
+                        buttons.push_back("Уведомления");
+                        if (UserAlternativeDownload(bd, query->from->id)) {
+                            buttons.push_back("✅ Альтернативная загрузка");
+                        } else {
+                            buttons.push_back("⬜ Альтернативная загрузка");
+                        }
+                        buttons.push_back("Альтернативная загрузка");
+                        text += "Статус: Premium\n Вам доступны все платные функции бота:\n";
+                    } else {
+                        buttons.push_back("Премиум");
+                        text += "Статус: Default\n Вам не доступны платные функции бота:\n";
+                    }
+                    buttons.push_back("Назад");
+                    text += "• Удаление вотермарок\n"
+                            "• Быстрая загрузка\n"
+                            "• Возможность выбора интервала лекций\n"
+                            "• Подписки\n"
+                            "• Уведомления об изменённых материалах\n"
+                            "• Альтернативный способ загрузки";
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, text, "", keyboard);
                 }
                 if (query->data == "Премиум") {
 

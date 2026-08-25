@@ -25,3 +25,6 @@ target_link_libraries(${PROJECT_NAME} TGkeyboards)
 
 add_subdirectory(pdf)
 target_link_libraries(${PROJECT_NAME} pdf)
+
+add_subdirectory(YaDisk)
+target_link_libraries(${PROJECT_NAME} YaDisk)

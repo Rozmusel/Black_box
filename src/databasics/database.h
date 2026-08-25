@@ -45,3 +45,5 @@ void setDelayedFile(Database &db, int64_t chat_id, const string& file_path, int6
 int addUser(Database &db, int64_t chat_id, const string& username);
 int64_t getLastMenuMessageId(Database &db, int64_t chat_id);
 void setLastMenuMessageId(Database &db, int64_t chat_id, int64_t message_id);
+void changeUserAlternativeDownload(Database &db, int64_t chat_id);
+int getUserAlternativeDownload(Database &db, int64_t chat_id);

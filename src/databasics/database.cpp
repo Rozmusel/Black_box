@@ -466,3 +466,30 @@ void setLastMenuMessageId(Database &db, int64_t chat_id, int64_t message_id) {
     update_query.bind(2, chat_id);
     update_query.exec();
 }
+
+void changeUserAlternativeDownload(Database &db, int64_t chat_id) {
+    spdlog::debug("Toggling alternative download status for chat_id {}", chat_id);
+    SQLite::Statement query(db, "SELECT alter_download FROM users WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    if (query.executeStep()) {
+        int current_status = query.getColumn(0).getInt();
+        int new_status = current_status == 0 ? 1 : 0;
+        SQLite::Statement update_query(db, "UPDATE users SET alter_download = ? WHERE chat_id = ?");
+        update_query.bind(1, new_status);
+        update_query.bind(2, chat_id);
+        update_query.exec();
+        spdlog::debug("Changed alternative download status to {} for chat_id {}", new_status, chat_id);
+    } else {
+        throw runtime_error("Chat not found");
+    }
+}
+
+int getUserAlternativeDownload(Database &db, int64_t chat_id) {
+    spdlog::debug("Fetching alternative download status for chat_id {}", chat_id);
+    SQLite::Statement query(db, "SELECT alter_download FROM users WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    if (query.executeStep()) {
+        return query.getColumn(0).getInt();
+    }
+    throw runtime_error("Chat not found");
+}

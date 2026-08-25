@@ -3,6 +3,7 @@
     "tgbot-cpp",
     "sqlitecpp",
     "spdlog",
-    "podofo"
+    "podofo",
+    "yandex-disk-cpp-client"
   ]
 }

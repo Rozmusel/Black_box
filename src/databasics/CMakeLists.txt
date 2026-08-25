@@ -7,5 +7,3 @@ target_link_libraries(database SQLiteCpp)
 
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(database spdlog::spdlog)
-
-target_link_libraries(database SQLiteCpp)
