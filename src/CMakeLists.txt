@@ -1,6 +1,6 @@
 set(BINARY_DIR "${CMAKE_BINARY_DIR}/bin")
 
-add_executable(${PROJECT_NAME} main.cpp TGPatches.cpp logging.cpp)
+add_executable(${PROJECT_NAME} main.cpp TGPatches.cpp logging.cpp PathUtils.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BINARY_DIR}"

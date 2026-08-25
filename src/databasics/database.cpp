@@ -105,7 +105,8 @@ void initDB(Database &db) {
         "alter_download INTEGER DEFAULT 0, "
         "notification INTEGER DEFAULT 0, "
         "subscription INTEGER DEFAULT 0, "
-        "last_menu_message_id INTEGER DEFAULT 0"
+        "last_menu_message_id INTEGER DEFAULT 0, "
+        "folder TEXT DEFAULT ''"
         ")"
     );
     //db.exec(
@@ -145,7 +146,7 @@ void initDB(Database &db) {
         );
     }
     try {
-        db.exec("ALTER TABLE users ADD COLUMN last_menu_message_id INTEGER");
+        db.exec("ALTER TABLE users ADD COLUMN folder TEXT DEFAULT ''");
     } catch (const SQLite::Exception&) {
         // Поле уже существует
 }
@@ -490,6 +491,34 @@ int getUserAlternativeDownload(Database &db, int64_t chat_id) {
     query.bind(1, chat_id);
     if (query.executeStep()) {
         return query.getColumn(0).getInt();
+    }
+    throw runtime_error("Chat not found");
+}
+
+string getUsername(Database &db, int64_t chat_id) {
+    spdlog::debug("Fetching username for chat_id {}", chat_id);
+    SQLite::Statement query(db, "SELECT username FROM users WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    if (query.executeStep()) {
+        return query.getColumn(0).getString();
+    }
+    throw runtime_error("Chat not found");
+}
+
+void setUserFolder(Database &db, int64_t chat_id, const string& folder) {
+    spdlog::debug("Setting folder '{}' for chat_id {}", folder, chat_id);
+    SQLite::Statement update_query(db, "UPDATE users SET folder = ? WHERE chat_id = ?");
+    update_query.bind(1, folder);
+    update_query.bind(2, chat_id);
+    update_query.exec();
+}
+
+string getUserFolder(Database &db, int64_t chat_id) {
+    spdlog::debug("Fetching folder for chat_id {}", chat_id);
+    SQLite::Statement query(db, "SELECT folder FROM users WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    if (query.executeStep()) {
+        return query.getColumn(0).getString();
     }
     throw runtime_error("Chat not found");
 }

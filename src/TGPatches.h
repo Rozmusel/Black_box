@@ -1,6 +1,7 @@
 #pragma once
 #include <tgbot/tgbot.h>
 #include <string>
+#include "PathUtils.h"
 
 using namespace std;
 using namespace TgBot;

@@ -1,6 +1,8 @@
 add_library(YaDisk STATIC YaDisk.cpp)
 
-target_include_directories(YaDisk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(YaDisk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src)
+
+target_sources(YaDisk PRIVATE ${CMAKE_SOURCE_DIR}/src/PathUtils.cpp)
 
 find_package(yandex-disk-cpp-client CONFIG REQUIRED)
 target_link_libraries(YaDisk PRIVATE yandex-disk-cpp-client::yandex-disk-cpp-client)

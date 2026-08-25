@@ -392,17 +392,18 @@ int main()
                 }
                 if (query->data == "Настройки") {
                     setUserState(bd, query->from->id, SETTINGS);
-                    vector<string> buttons = {"Филиалы", "Отзывы"};
-                    string text = "Пользователь: @" + query->from->username + "\n";
-                    if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {    // isUserPremium(message->from->id)
-                        buttons.push_back("Подписки");
-                        buttons.push_back("Уведомления");
+                    vector<string> buttons;
                         if (UserAlternativeDownload(bd, query->from->id)) {
                             buttons.push_back("✅ Альтернативная загрузка");
                         } else {
                             buttons.push_back("⬜ Альтернативная загрузка");
                         }
-                        buttons.push_back("Альтернативная загрузка");
+                    buttons.push_back("Филиалы");
+                    buttons.push_back("Отзывы");
+                    string text = "Пользователь: @" + query->from->username + "\n";
+                    if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {    // isUserPremium(message->from->id)
+                        buttons.push_back("Подписки");
+                        buttons.push_back("Уведомления");
                         text += "Статус: Premium\n Вам доступны все платные функции бота:\n";
                     } else {
                         buttons.push_back("Премиум");
@@ -415,6 +416,9 @@ int main()
                             "• Подписки\n"
                             "• Уведомления об изменённых материалах\n"
                             "• Альтернативный способ загрузки";
+                    if (getUserFolder(bd, query->from->id).empty() == false) {
+                        text += "\n\nПапка c вашими загруженными файлами: " + getUserFolder(bd, query->from->id);
+                    }
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
                     InputMediaPhoto::Ptr media = MessageMedia(query->message->chat->id, query->message->messageId,
                         getMediaIdFromDatabase(bd , "peter"), text, keyboard
@@ -480,9 +484,10 @@ int main()
                 if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
                     if (UserAlternativeDownload(bd, query->from->id)) {
                         string filePath = getFilePath(bd, subject_name, fileType, count, group_name);
-                        string YaPath = "app:/" + group_name + " " + subject_name + " " + subject_type + " " + to_string(count) + ".pdf";
+                        string dir = getUsername(bd, query->from->id).empty() ? to_string(query->from->id) : getUsername(bd, query->from->id);
+                        string YaPath = "app:/" + dir + "/" + group_name + " " + subject_name + " " + subject_type + " " + to_string(count) + ".pdf";
                         string publicLink = uploadFileToYandexDisk(YaToken, filePath, YaPath);
-                        bot.getApi().sendMessage(query->message->chat->id, "Ссылка на скачивание: " + publicLink);
+                        bot.getApi().sendMessage(query->message->chat->id, "Файл доступен по ссылке: " + publicLink);
                     } else {
                         string fileId = getFileId(bd, subject_name, fileType, count, group_name);
                         bot.getApi().sendDocument(query->message->chat->id, fileId);
@@ -515,6 +520,18 @@ int main()
                 }
                 string filePath = "temp/" + subject_name + " " + subjectTypePluralTitle + " 1-" + std::to_string(count) + ".pdf";
                 pdfMerge(files, filePath);
+                if (UserAlternativeDownload(bd, query->from->id)) {
+                    string dir = getUsername(bd, query->from->id).empty() ? to_string(query->from->id) : getUsername(bd, query->from->id);
+                    string YaPath = "app:/" + dir + "/" + group_name + " " + subject_name + " " + subject_type + " 1-" + std::to_string(count) + ".pdf";
+                    string publicLink = uploadFileToYandexDisk(YaToken, filePath, YaPath);
+                    bot.getApi().sendMessage(query->message->chat->id, "Файл доступен по ссылке: " + publicLink);
+                    if (!publicLink.empty()) {
+                        fs::remove(fs::u8path(filePath));
+                    } else {
+                        bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
+                        spdlog::error("Failed to upload merged file to Yandex Disk: {}", filePath);
+                    }
+                } else {
                 string response = SendDocumentViaLocalServer(
                         "http://127.0.0.1:8081",
                         token,
@@ -530,6 +547,7 @@ int main()
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
                     spdlog::error("Failed to send merged file: {}", filePath);
                 }
+            }
             }
             if (query->data == "interval_mode") {
                 if (UserAccess(bd, query->message->chat->id) < PREMIUM) {
@@ -609,6 +627,18 @@ int main()
                 }
                 string filePath = "temp/" + subject_name + " " + subjectTypePluralTitle + " " + to_string(first) + "-" + std::to_string(second) + ".pdf";
                 pdfMerge(files, filePath);
+                if (UserAlternativeDownload(bd, query->from->id)) {
+                    string dir = getUsername(bd, query->from->id).empty() ? to_string(query->from->id) : getUsername(bd, query->from->id);
+                    string YaPath = "app:/" + dir + "/" + group_name + " " + subject_name + " " + subject_type + " " + to_string(first) + "-" + std::to_string(second) + ".pdf";
+                    string publicLink = uploadFileToYandexDisk(YaToken, filePath, YaPath);
+                    bot.getApi().sendMessage(query->message->chat->id, "Файл доступен по ссылке: " + publicLink);
+                    if (!publicLink.empty()) {
+                        fs::remove(fs::u8path(filePath));
+                    } else {
+                        bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
+                        spdlog::error("Failed to upload merged file to Yandex Disk: {}", filePath);
+                    }
+                } else {
                 string response = SendDocumentViaLocalServer(
                         "http://127.0.0.1:8081",
                         token,
@@ -624,6 +654,8 @@ int main()
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
                     spdlog::error("Failed to send merged file: {}", filePath);
                 }
+            }
+                
             }
             }
             break;
@@ -677,25 +709,30 @@ int main()
                     ), query->message->chat->id, query->message->messageId, "", keyboard);
                 }
                 if (query->data == "Уведомления") {
-
+                    bot.getApi().answerCallbackQuery(query->id, "Функция в разработке");
                 }
                 if (query->data == "Подписки") {
-
+                    bot.getApi().answerCallbackQuery(query->id, "Функция в разработке");
                 }
                 if (query->data.find("Альтернативная загрузка") != string::npos) {
                     spdlog::info("User {} toggled alternative download", query->from->username);
                     changeUserAlternativeDownload(bd, query->from->id);
-                    vector<string> buttons = {"Филиалы", "Отзывы"};
-                    string text = "Пользователь: @" + query->from->username + "\n";
-                    if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {    // isUserPremium(message->from->id)
-                        buttons.push_back("Подписки");
-                        buttons.push_back("Уведомления");
+                    if (getUserFolder(bd, query->from->id).empty() == true) {
+                        string username = "app:/" + (getUsername(bd, query->from->id).starts_with("@") ? getUsername(bd, query->from->id) : to_string(query->from->id));
+                        setUserFolder(bd, query->from->id, publishFolder(YaToken, username));
+                    }
+                    vector<string> buttons;
                         if (UserAlternativeDownload(bd, query->from->id)) {
                             buttons.push_back("✅ Альтернативная загрузка");
                         } else {
                             buttons.push_back("⬜ Альтернативная загрузка");
                         }
-                        buttons.push_back("Альтернативная загрузка");
+                    buttons.push_back("Филиалы");
+                    buttons.push_back("Отзывы");
+                    string text = "Пользователь: @" + query->from->username + "\n";
+                    if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {    // isUserPremium(message->from->id)
+                        buttons.push_back("Подписки");
+                        buttons.push_back("Уведомления");
                         text += "Статус: Premium\n Вам доступны все платные функции бота:\n";
                     } else {
                         buttons.push_back("Премиум");
@@ -708,6 +745,9 @@ int main()
                             "• Подписки\n"
                             "• Уведомления об изменённых материалах\n"
                             "• Альтернативный способ загрузки";
+                    if (getUserFolder(bd, query->from->id).empty() == false) {
+                        text += "\n\nПапка c вашими загруженными файлами: " + getUserFolder(bd, query->from->id);
+                    }
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
                     bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, text, "", keyboard);
                 }
@@ -850,3 +890,4 @@ int main()
 
     return 0;
 }
+

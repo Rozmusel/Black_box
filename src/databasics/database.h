@@ -47,3 +47,6 @@ int64_t getLastMenuMessageId(Database &db, int64_t chat_id);
 void setLastMenuMessageId(Database &db, int64_t chat_id, int64_t message_id);
 void changeUserAlternativeDownload(Database &db, int64_t chat_id);
 int getUserAlternativeDownload(Database &db, int64_t chat_id);
+string getUsername(Database &db, int64_t chat_id);
+void setUserFolder(Database &db, int64_t chat_id, const string& folder);
+string getUserFolder(Database &db, int64_t chat_id);

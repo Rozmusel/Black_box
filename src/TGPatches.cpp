@@ -1,10 +1,9 @@
 #include <tgbot/tgbot.h>
+#include "PathUtils.h"
 #include "spdlog/spdlog.h"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <locale>
-#include <codecvt>
 #include <curl/curl.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -81,74 +80,6 @@ static bool extractJsonBool(const std::string& json, const std::string& key)
         return false;
     }
     return false;
-}
-
-static std::filesystem::path makePathFromString(const std::string& filePath)
-{
-#ifdef _WIN32
-    // Support UTF-8 file names on Windows.
-    std::filesystem::path path = std::filesystem::u8path(filePath);
-    if (std::filesystem::exists(path)) {
-        return path;
-    }
-    try {
-        std::wstring utf8Wide = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().from_bytes(filePath);
-        std::filesystem::path utf8Path(utf8Wide);
-        if (std::filesystem::exists(utf8Path)) {
-            return utf8Path;
-        }
-    } catch (...) {
-    }
-    try {
-        std::wstring acpWide = std::wstring_convert<std::codecvt<wchar_t, char, std::mbstate_t>>().from_bytes(filePath);
-        std::filesystem::path acpPath(acpWide);
-        if (std::filesystem::exists(acpPath)) {
-            return acpPath;
-        }
-    } catch (...) {
-    }
-    return path;
-#else
-    return std::filesystem::u8path(filePath);
-#endif
-}
-
-static std::string pathToUtf8String(const std::filesystem::path& path)
-{
-#ifdef _WIN32
-    auto wide = path.wstring();
-    return std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().to_bytes(wide);
-#else
-    return path.string();
-#endif
-}
-
-static std::filesystem::path resolveExistingPath(const std::filesystem::path& path)
-{
-    if (std::filesystem::exists(path)) {
-        return path;
-    }
-
-    auto absPath = std::filesystem::absolute(path);
-    if (std::filesystem::exists(absPath)) {
-        return absPath;
-    }
-
-    auto cwd = std::filesystem::current_path();
-    for (auto dir = cwd; !dir.empty(); dir = dir.parent_path()) {
-        auto candidate = dir / path;
-        if (std::filesystem::exists(candidate)) {
-            return candidate;
-        }
-        if (path.has_filename()) {
-            auto filenameCandidate = dir / path.filename();
-            if (std::filesystem::exists(filenameCandidate)) {
-                return filenameCandidate;
-            }
-        }
-    }
-
-    return path;
 }
 
 std::string SendDocumentViaLocalServer(const std::string& apiUrl,
