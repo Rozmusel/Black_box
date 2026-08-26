@@ -5,7 +5,7 @@
 
 using namespace std;
 using namespace TgBot;
-InputMediaPhoto::Ptr MessageMedia(int64_t chatId, int messageId, const string& mediaId, const string& caption, InlineKeyboardMarkup::Ptr keyboard);
+InputMediaPhoto::Ptr MessageMedia(const string& mediaId, const string& caption);
 InputFile::Ptr LoadFile(const string filePath, const string& mimeType);
 std::string SendDocumentViaLocalServer(const std::string& apiUrl,
                                       const std::string& token,

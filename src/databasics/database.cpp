@@ -16,7 +16,6 @@ void subject::insert(Database &bd, string file_path, string file_id, string grou
         query.bind(6, count);
         query.exec();
 }
-
 void subject::update(Database &bd, string file_id, string file_path, string group_name) {
     if (count > getFileCount(bd, name, type, group_name)) throw runtime_error("File is not exist");
 
@@ -103,15 +102,13 @@ void initDB(Database &db) {
         "state INTEGER DEFAULT 0, "
         "access INTEGER DEFAULT 0, "
         "alter_download INTEGER DEFAULT 0, "
-        "notification INTEGER DEFAULT 0, "
         "subscription INTEGER DEFAULT 0, "
+        "notification INTEGER DEFAULT 0, "
         "last_menu_message_id INTEGER DEFAULT 0, "
-        "folder TEXT DEFAULT ''"
+        "folder TEXT DEFAULT '', "
+        "provider_data TEXT DEFAULT ''"
         ")"
     );
-    //db.exec(
-    //    "DROP TABLE IF EXISTS files"
-    //);
     db.exec(
         "CREATE TABLE IF NOT EXISTS files ("
         "file_id TEXT PRIMARY KEY, "
@@ -135,6 +132,38 @@ void initDB(Database &db) {
         "PRIMARY KEY (chat_id, file_path)"
         ")"
     );
+    try { db.exec("ALTER TABLE users ADD COLUMN subscription INTEGER DEFAULT 0"); } catch (...) {}
+    try { db.exec("ALTER TABLE users ADD COLUMN notification INTEGER DEFAULT 0"); } catch (...) {}
+    db.exec(
+        "CREATE TABLE IF NOT EXISTS subscriptions ("
+        "chat_id INTEGER, "
+        "subject_name TEXT, "
+        "type INTEGER, "
+        "group_name TEXT, "
+        "PRIMARY KEY (chat_id, subject_name, type, group_name)"
+        ")"
+    );
+    db.exec(
+        "CREATE TABLE IF NOT EXISTS downloaded_files ("
+        "chat_id INTEGER, "
+        "subject_name TEXT, "
+        "type INTEGER, "
+        "group_name TEXT, "
+        "PRIMARY KEY (chat_id, subject_name, type, group_name)"
+        ")"
+    );
+    bool legacyHistoryMigrated = false;
+    try {
+        db.exec(
+            "INSERT OR IGNORE INTO downloaded_files (chat_id, subject_name, type, group_name) "
+            "SELECT chat_id, subject_name, type, group_name FROM file_deliveries "
+            "WHERE subject_name IS NOT NULL AND type IS NOT NULL AND group_name IS NOT NULL"
+        );
+        legacyHistoryMigrated = true;
+    } catch (...) {}
+    if (legacyHistoryMigrated) {
+        db.exec("DROP TABLE IF EXISTS file_deliveries");
+    }
     for (const auto& group : getGroups(db)) {
         db.exec(
             "CREATE TABLE IF NOT EXISTS \"" + group + "\" ("
@@ -145,11 +174,7 @@ void initDB(Database &db) {
             ")"
         );
     }
-    try {
-        db.exec("ALTER TABLE users ADD COLUMN folder TEXT DEFAULT ''");
-    } catch (const SQLite::Exception&) {
-        // Поле уже существует
-}
+
 }
 
 int8_t getFileCount(Database &db, const string& name, int8_t type, const string& group_name) {
@@ -356,17 +381,102 @@ void deleteLastSubject(Database &db, const string& callback_data) {
 }
 
 int UserSubscription(Database &db, int64_t chat_id) {
-    spdlog::debug("Checking subscription status for chat_id {}", chat_id);
     SQLite::Statement query(db, "SELECT subscription FROM users WHERE chat_id = ?");
     query.bind(1, chat_id);
-    if (query.executeStep()) {
-        return query.getColumn(0).getInt();
-    }
-    throw runtime_error("Chat not found");  
+    if (query.executeStep()) return query.getColumn(0).getInt();
+    throw runtime_error("Chat not found");
+}
+
+void changeUserSubscription(Database &db, int64_t chat_id) {
+    SQLite::Statement query(db, "UPDATE users SET subscription = CASE subscription WHEN 0 THEN 1 ELSE 0 END WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    query.exec();
+}
+
+int UserNotification(Database &db, int64_t chat_id) {
+    SQLite::Statement query(db, "SELECT notification FROM users WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    if (query.executeStep()) return query.getColumn(0).getInt();
+    throw runtime_error("Chat not found");
+}
+
+void changeUserNotification(Database &db, int64_t chat_id) {
+    SQLite::Statement query(db, "UPDATE users SET notification = CASE notification WHEN 0 THEN 1 ELSE 0 END WHERE chat_id = ?");
+    query.bind(1, chat_id);
+    query.exec();
 }
 
 int UserSubjectSubscription(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type) {
-    return 0; // Заглушка
+    SQLite::Statement query(db, "SELECT 1 FROM subscriptions WHERE chat_id = ? AND subject_name = ? AND group_name = ? AND type = ?");
+    query.bind(1, chat_id);
+    query.bind(2, subject_name);
+    query.bind(3, group_name);
+    query.bind(4, type);
+    return query.executeStep() ? 1 : 0;
+}
+
+void setSubjectSubscription(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type, bool enabled) {
+    if (enabled) {
+        SQLite::Statement query(db, "INSERT OR IGNORE INTO subscriptions (chat_id, subject_name, type, group_name) VALUES (?, ?, ?, ?)");
+        query.bind(1, chat_id);
+        query.bind(2, subject_name);
+        query.bind(3, type);
+        query.bind(4, group_name);
+        query.exec();
+    } else {
+        SQLite::Statement query(db, "DELETE FROM subscriptions WHERE chat_id = ? AND subject_name = ? AND group_name = ? AND type = ?");
+        query.bind(1, chat_id);
+        query.bind(2, subject_name);
+        query.bind(3, group_name);
+        query.bind(4, type);
+        query.exec();
+    }
+}
+
+vector<int64_t> getSubjectSubscribers(Database &db, const string& subject_name, const string& group_name, int8_t type) {
+    SQLite::Statement query(db, "SELECT s.chat_id FROM subscriptions s JOIN users u ON u.chat_id = s.chat_id WHERE u.subscription = 1 AND s.subject_name = ? AND s.group_name = ? AND s.type = ?");
+    query.bind(1, subject_name);
+    query.bind(2, group_name);
+    query.bind(3, type);
+    vector<int64_t> result;
+    while (query.executeStep()) result.push_back(query.getColumn(0).getInt64());
+    return result;
+}
+
+vector<int64_t> getFileNotificationRecipients(Database &db, const string& subject_name, const string& group_name, int8_t type) {
+    SQLite::Statement query(db,
+        "SELECT d.chat_id FROM downloaded_files d "
+        "JOIN users u ON u.chat_id = d.chat_id "
+        "WHERE u.notification = 1 AND u.access >= 1 "
+        "AND d.subject_name = ? AND d.group_name = ? AND d.type = ?"
+    );
+    query.bind(1, subject_name);
+    query.bind(2, group_name);
+    query.bind(3, type);
+    vector<int64_t> result;
+    while (query.executeStep()) result.push_back(query.getColumn(0).getInt64());
+    return result;
+}
+
+void recordDownloadedFile(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type) {
+    SQLite::Statement query(db,
+        "INSERT OR IGNORE INTO downloaded_files (chat_id, subject_name, type, group_name) VALUES (?, ?, ?, ?)"
+    );
+    query.bind(1, chat_id);
+    query.bind(2, subject_name);
+    query.bind(3, type);
+    query.bind(4, group_name);
+    query.exec();
+}
+
+void recordDownloadedFileByPath(Database &db, int64_t chat_id, const string& file_path) {
+    SQLite::Statement query(db, "SELECT name, type, group_name FROM files WHERE file_path = ?");
+    query.bind(1, file_path);
+    if (query.executeStep()) {
+        recordDownloadedFile(db, chat_id, query.getColumn(0).getString(),
+                             query.getColumn(2).getString(),
+                             static_cast<int8_t>(query.getColumn(1).getInt()));
+    }
 }
 
 string getFileId(Database &db, const string& name, int8_t type, int8_t count, const string& group_name) {
@@ -436,6 +546,13 @@ string getFilePath(Database &db, const string& name, int8_t type, int8_t count, 
         return query.getColumn(0).getString();
     }
     throw runtime_error("File path not found");
+}
+
+string getFileIdByPath(Database &db, const string& file_path) {
+    SQLite::Statement query(db, "SELECT file_id FROM files WHERE file_path = ?");
+    query.bind(1, file_path);
+    if (query.executeStep()) return query.getColumn(0).getString();
+    throw runtime_error("File not found by path");
 }
 
 void setDelayedFile(Database &db, int64_t chat_id, const string& file_path, int64_t scheduled_at) {
@@ -522,3 +639,22 @@ string getUserFolder(Database &db, int64_t chat_id) {
     }
     throw runtime_error("Chat not found");
 }
+
+void setUserAccess(Database &db, int64_t chat_id, int access) {
+    spdlog::debug("Setting access level {} for chat_id {}", access, chat_id);
+    SQLite::Statement update_query(db, "UPDATE users SET access = ? WHERE chat_id = ?");
+    update_query.bind(1, access);
+    update_query.bind(2, chat_id);
+    update_query.exec();
+    spdlog::debug("Changed access level to {} for chat_id {}", access, chat_id);
+}
+
+void setProviderData(Database &db, int64_t chat_id, const string& provider_data) {
+    spdlog::debug("Setting provider data '{}' for chat_id {}", provider_data, chat_id);
+    SQLite::Statement update_query(db, "UPDATE users SET provider_data = ? WHERE chat_id = ?");
+    update_query.bind(1, provider_data);
+    update_query.bind(2, chat_id);
+    update_query.exec();
+    spdlog::debug("Changed provider data to '{}' for chat_id {}", provider_data, chat_id);
+}
+

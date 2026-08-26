@@ -196,7 +196,7 @@ std::string SendDocumentViaLocalServer(const std::string& apiUrl,
     return fileId;
 }
 
-InputMediaPhoto::Ptr MessageMedia(int64_t chatId, int messageId, const string& mediaId, const string& caption, InlineKeyboardMarkup::Ptr keyboard) {
+InputMediaPhoto::Ptr MessageMedia(const string& mediaId, const string& caption) {
     spdlog::debug("Building message media");
 
     InputMediaPhoto::Ptr media = std::make_shared<InputMediaPhoto>();
