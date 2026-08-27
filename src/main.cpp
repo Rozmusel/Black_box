@@ -92,8 +92,9 @@ void notifyNewFileSubscribers(Bot &bot, Database &db, const string& token,
 
 void notifyUpdatedFileRecipients(Bot &bot, Database &db, const string& token,
                                  const string& subjectName, int8_t type,
-                                 const string& groupName, const string& filePath) {
-    for (const int64_t chatId : getFileNotificationRecipients(db, subjectName, groupName, type)) {
+                                 const string& groupName, int8_t count,
+                                 const string& filePath) {
+    for (const int64_t chatId : getFileNotificationRecipients(db, subjectName, groupName, type, count)) {
         try {
             SendDocumentViaLocalServer("http://127.0.0.1:8081", token, chatId,
                                        filePath, "application/pdf",
@@ -382,7 +383,7 @@ int main() {
                     } else {
                         sub.update(bd, fileId, newFilePath, groupName);
                         if (!fileId.empty()) {
-                            notifyUpdatedFileRecipients(bot, bd, token, sub.name, sub.type, groupName, newFilePath);
+                            notifyUpdatedFileRecipients(bot, bd, token, sub.name, sub.type, groupName, sub.count, newFilePath);
                         }
                         bot.getApi().sendMessage(message->chat->id, "Файл успешно обновлён в базе данных");
                     }
@@ -497,7 +498,8 @@ int main() {
                     InputMediaPhoto::Ptr media = MessageMedia(
                         getMediaIdFromDatabase(bd , "freedom"), "Поздравляю, вы получили доступ ко всем материалам.\n"
                         "Чтобы попасть в основное меню, используйте /start\n"
-                        "Советую использовать кнопку Menu для вызова команды /start и использовать её всякий раз, когда нужно опустить диалоговое окно вниз"
+                        "Настоятельно рекомендуется ознакомиться с репозиторием данного проекта https://github.com/Rozmusel/Black_box\n"
+                        "На главной странице вы найдёте описание всех новых функций, а также, если вы обнаружите неисправность, сообщите о ней во вкладке Issues."
                     );
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId);
                     bot.getApi().answerCallbackQuery(query->id, "Воздух потрескивает от свободы");
@@ -623,12 +625,12 @@ int main() {
                         string publicLink = uploadFileToYandexDisk(YaToken, filePath, YaPath);
                         bot.getApi().sendMessage(query->message->chat->id, "Файл доступен по ссылке: " + publicLink);
                         if (!publicLink.empty())
-                            recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType);
+                            recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, count);
                     } else {
                         string fileId = getFileId(bd, subject_name, fileType, count, group_name);
                         auto sentMessage = bot.getApi().sendDocument(query->message->chat->id, fileId);
                         if (sentMessage->document != nullptr)
-                            recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType);
+                            recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, count);
                     }
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Файл будет отправлен через 5 минут");
@@ -664,7 +666,8 @@ int main() {
                     string publicLink = uploadFileToYandexDisk(YaToken, filePath, YaPath);
                     bot.getApi().sendMessage(query->message->chat->id, "Файл доступен по ссылке: " + publicLink);
                     if (!publicLink.empty()) {
-                        recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType);
+                        for (int8_t downloadedCount = 1; downloadedCount <= count; downloadedCount++)
+                            recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
                         fs::remove(fs::u8path(filePath));
                     } else {
                         bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
@@ -681,7 +684,8 @@ int main() {
                         "HTML"
                     );
                 if (!response.empty()) {
-                    recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType);
+                    for (int8_t downloadedCount = 1; downloadedCount <= count; downloadedCount++)
+                        recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
                     fs::remove(fs::u8path(filePath));
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
@@ -759,7 +763,8 @@ int main() {
                     string publicLink = uploadFileToYandexDisk(YaToken, filePath, YaPath);
                     bot.getApi().sendMessage(query->message->chat->id, "Файл доступен по ссылке: " + publicLink);
                     if (!publicLink.empty()) {
-                        recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType);
+                        for (int8_t downloadedCount = first; downloadedCount <= second; downloadedCount++)
+                            recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
                         fs::remove(fs::u8path(filePath));
                     } else {
                         bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
@@ -776,7 +781,8 @@ int main() {
                         "HTML"
                     );
                 if (!response.empty()) {
-                    recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType);
+                    for (int8_t downloadedCount = first; downloadedCount <= second; downloadedCount++)
+                        recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
                     fs::remove(fs::u8path(filePath));
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
@@ -1060,21 +1066,26 @@ int main() {
         spdlog::error(e.what());
     } });
     bot.getEvents().onCommand("start", [&bot, &bd](Message::Ptr message) { // Стартовое меню
-        spdlog::info("{}| Стартовое меню", message->from->id);
-        if (UserState(bd, message->from->id) == REGISTRATION)
-            return;
-        vector<string> buttons = {"Лекции", "Семинары", "Настройки"};
-        if (UserAccess(bd, message->chat->id) == ADMIN)
-            buttons.push_back("Администраторская");
-        InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
-        auto msg = bot.getApi().sendPhoto(message->chat->id, getMediaIdFromDatabase(bd, "start"),
-                               "Выберите опцию",
-                               nullptr, keyboard, "Markdown");
-        if (getLastMenuMessageId(bd, message->from->id) != 0)
-            deleteMessageIfExists(bot, message->chat->id, getLastMenuMessageId(bd, message->from->id));
-        deleteMessageIfExists(bot, message->chat->id, message->messageId);
-        setLastMenuMessageId(bd, message->from->id, msg->messageId);
-        setUserState(bd, message->from->id, START);
+        try {
+            spdlog::info("{}| Стартовое меню", message->from->id);
+            if (UserState(bd, message->from->id) == REGISTRATION)
+                return;
+            vector<string> buttons = {"Лекции", "Семинары", "Настройки"};
+            if (UserAccess(bd, message->chat->id) == ADMIN)
+                buttons.push_back("Администраторская");
+            InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
+            auto msg = bot.getApi().sendPhoto(message->chat->id, getMediaIdFromDatabase(bd, "start"),
+                                   "Выберите опцию",
+                                   nullptr, keyboard, "Markdown");
+            if (getLastMenuMessageId(bd, message->from->id) != 0)
+                deleteMessageIfExists(bot, message->chat->id, getLastMenuMessageId(bd, message->from->id));
+            deleteMessageIfExists(bot, message->chat->id, message->messageId);
+            setLastMenuMessageId(bd, message->from->id, msg->messageId);
+            setUserState(bd, message->from->id, START);
+        }
+        catch (const exception& error) {
+            spdlog::error("Ошибка стартового меню для пользователя {}: {}", message->from->id, error.what());
+        }
     });
 
     bot.getEvents().onPreCheckoutQuery(

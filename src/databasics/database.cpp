@@ -147,21 +147,10 @@ void initDB(Database &db) {
         "subject_name TEXT, "
         "type INTEGER, "
         "group_name TEXT, "
-        "PRIMARY KEY (chat_id, subject_name, type, group_name)"
+        "count INTEGER, "
+        "PRIMARY KEY (chat_id, subject_name, type, group_name, count)"
         ")"
     );
-    bool legacyHistoryMigrated = false;
-    try {
-        db.exec(
-            "INSERT OR IGNORE INTO downloaded_files (chat_id, subject_name, type, group_name) "
-            "SELECT chat_id, subject_name, type, group_name FROM file_deliveries "
-            "WHERE subject_name IS NOT NULL AND type IS NOT NULL AND group_name IS NOT NULL"
-        );
-        legacyHistoryMigrated = true;
-    } catch (...) {}
-    if (legacyHistoryMigrated) {
-        db.exec("DROP TABLE IF EXISTS file_deliveries");
-    }
     for (const auto& group : getGroups(db)) {
         db.exec(
             "CREATE TABLE IF NOT EXISTS \"" + group + "\" ("
@@ -476,39 +465,42 @@ vector<int64_t> getSubjectSubscribers(Database &db, const string& subject_name, 
     return result;
 }
 
-vector<int64_t> getFileNotificationRecipients(Database &db, const string& subject_name, const string& group_name, int8_t type) {
+vector<int64_t> getFileNotificationRecipients(Database &db, const string& subject_name, const string& group_name, int8_t type, int8_t count) {
     SQLite::Statement query(db,
         "SELECT d.chat_id FROM downloaded_files d "
         "JOIN users u ON u.chat_id = d.chat_id "
         "WHERE u.notification = 1 AND u.access >= 1 "
-        "AND d.subject_name = ? AND d.group_name = ? AND d.type = ?"
+        "AND d.subject_name = ? AND d.group_name = ? AND d.type = ? AND d.count = ?"
     );
     query.bind(1, subject_name);
     query.bind(2, group_name);
     query.bind(3, type);
+    query.bind(4, count);
     vector<int64_t> result;
     while (query.executeStep()) result.push_back(query.getColumn(0).getInt64());
     return result;
 }
 
-void recordDownloadedFile(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type) {
+void recordDownloadedFile(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type, int8_t count) {
     SQLite::Statement query(db,
-        "INSERT OR IGNORE INTO downloaded_files (chat_id, subject_name, type, group_name) VALUES (?, ?, ?, ?)"
+        "INSERT OR IGNORE INTO downloaded_files (chat_id, subject_name, type, group_name, count) VALUES (?, ?, ?, ?, ?)"
     );
     query.bind(1, chat_id);
     query.bind(2, subject_name);
     query.bind(3, type);
     query.bind(4, group_name);
+    query.bind(5, count);
     query.exec();
 }
 
 void recordDownloadedFileByPath(Database &db, int64_t chat_id, const string& file_path) {
-    SQLite::Statement query(db, "SELECT name, type, group_name FROM files WHERE file_path = ?");
+    SQLite::Statement query(db, "SELECT name, type, group_name, count FROM files WHERE file_path = ?");
     query.bind(1, file_path);
     if (query.executeStep()) {
         recordDownloadedFile(db, chat_id, query.getColumn(0).getString(),
                              query.getColumn(2).getString(),
-                             static_cast<int8_t>(query.getColumn(1).getInt()));
+                             static_cast<int8_t>(query.getColumn(1).getInt()),
+                             static_cast<int8_t>(query.getColumn(3).getInt()));
     }
 }
 

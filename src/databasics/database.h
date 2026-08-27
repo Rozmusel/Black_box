@@ -58,6 +58,6 @@ void changeUserNotification(Database &db, int64_t chat_id);
 int UserSubjectSubscription(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type);
 void setSubjectSubscription(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type, bool enabled);
 vector<int64_t> getSubjectSubscribers(Database &db, const string& subject_name, const string& group_name, int8_t type);
-vector<int64_t> getFileNotificationRecipients(Database &db, const string& subject_name, const string& group_name, int8_t type);
-void recordDownloadedFile(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type);
+vector<int64_t> getFileNotificationRecipients(Database &db, const string& subject_name, const string& group_name, int8_t type, int8_t count);
+void recordDownloadedFile(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type, int8_t count);
 void recordDownloadedFileByPath(Database &db, int64_t chat_id, const string& file_path);
