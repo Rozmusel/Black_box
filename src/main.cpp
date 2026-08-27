@@ -1,4 +1,4 @@
-#include <csignal>
+#include <csignal>  // Стандартные библиотеки
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -11,7 +11,7 @@
 #include <chrono>
 #include <set>
 
-#include <tgbot/tgbot.h>
+#include <tgbot/tgbot.h>    // Библиотеки подключённые через vcpkg
 #include <tgbot/net/CurlHttpClient.h>
 #include <SQLiteCpp/SQLiteCpp.h>
 #include "spdlog/spdlog.h"
@@ -19,7 +19,7 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/sinks/basic_file_sink.h"
 
-#include "databasics/database.h"
+#include "databasics/database.h"    // Подключение самописных подмодулей
 #include "TGkeyboards/TGkeyboards.h"
 #include "TGPatches.h"
 #include "logging.h"
@@ -30,66 +30,6 @@ using namespace std;
 using namespace TgBot;
 
 namespace fs = std::filesystem;
-
-string getRequiredEnv(const char* name)
-{
-    const char* value = std::getenv(name);
-
-    if (value == nullptr || *value == '\0') {
-        throw runtime_error(
-            string("Environment variable is not set: ") + name
-        );
-    }
-
-    return value;
-}
-
-void deleteMessageIfExists(Bot &bot, int64_t chatId, int32_t messageId)
-{
-    if (messageId == 0)
-        return;
-
-    try
-    {
-        bot.getApi().deleteMessage(chatId, messageId);
-    }
-    catch (const exception &error)
-    {
-        spdlog::warn("Could not delete message {} in chat {}: {}", messageId, chatId, error.what());
-    }
-}
-
-void notifyNewFileSubscribers(Bot &bot, Database &db, const string& token,
-                              const string& subjectName, int8_t type,
-                              const string& groupName, const string& filePath)
-{
-    for (const int64_t chatId : getSubjectSubscribers(db, subjectName, groupName, type)) {
-        try {
-            SendDocumentViaLocalServer("http://127.0.0.1:8081", token, chatId,
-                                       filePath, "application/pdf",
-                                       "Новый файл: " + subjectName, "HTML");
-        }
-        catch (const exception& error) {
-            spdlog::warn("Could not notify subscriber {} about file '{}': {}", chatId, filePath, error.what());
-        }
-    }
-}
-
-void notifyUpdatedFileRecipients(Bot &bot, Database &db, const string& token,
-                                 const string& subjectName, int8_t type,
-                                 const string& groupName, const string& filePath)
-{
-    for (const int64_t chatId : getFileNotificationRecipients(db, subjectName, groupName, type)) {
-        try {
-            SendDocumentViaLocalServer("http://127.0.0.1:8081", token, chatId,
-                                       filePath, "application/pdf",
-                                       "Файл изменён: " + subjectName, "HTML");
-        }
-        catch (const exception& error) {
-            spdlog::warn("Could not notify user {} about updated file '{}': {}", chatId, filePath, error.what());
-        }
-    }
-}
 
 enum UserStatus
 {
@@ -110,25 +50,114 @@ enum UserAccess
 
 #define PRICE 30000 // 300.00 RUB
 
-void handleConsoleCommand(Bot &bot, const std::string &line)
+
+string getRequiredEnv(const char* name) {   // Функция для корректной обработки ошибок при получении переменных окружения
+    const char* value = std::getenv(name);
+
+    if (value == nullptr || *value == '\0') {
+        throw runtime_error(
+            string("Environment variable is not set: ") + name
+        );
+    }
+
+    return value;
+}
+
+void deleteMessageIfExists(Bot &bot, int64_t chatId, int32_t messageId) { // Удаление существующих сообщений
+    if (messageId == 0)
+        return;
+
+    try {
+        bot.getApi().deleteMessage(chatId, messageId);
+    }
+    catch (const exception &error) {
+        spdlog::warn("Не получилось удалить сообщение {} в чате {}: {}", messageId, chatId, error.what());
+    }
+}
+
+void notifyNewFileSubscribers(Bot &bot, Database &db, const string& token,
+                              const string& subjectName, int8_t type,
+                              const string& groupName, const string& filePath) {
+    for (const int64_t chatId : getSubjectSubscribers(db, subjectName, groupName, type)) {
+        try {
+            SendDocumentViaLocalServer("http://127.0.0.1:8081", token, chatId,
+                                       filePath, "application/pdf",
+                                       "Подписка на " + subjectName + " " + (type ? "Лекция" : "Семинар"), "HTML");
+        }
+        catch (const exception& error) {
+            spdlog::warn("Не получилось уведомить {} о файле '{}': {}", chatId, filePath, error.what());
+        }
+    }
+}
+
+void notifyUpdatedFileRecipients(Bot &bot, Database &db, const string& token,
+                                 const string& subjectName, int8_t type,
+                                 const string& groupName, const string& filePath) {
+    for (const int64_t chatId : getFileNotificationRecipients(db, subjectName, groupName, type)) {
+        try {
+            SendDocumentViaLocalServer("http://127.0.0.1:8081", token, chatId,
+                                       filePath, "application/pdf",
+                                       "Уведомление об изменении " + subjectName + " " + (type ? "Лекция" : "Семинар"), "HTML");
+        }
+        catch (const exception& error) {
+            spdlog::warn("Не получилось уведомить {} о изменённом файле '{}': {}", chatId, filePath, error.what());
+        }
+    }
+}
+
+
+void handleConsoleCommand(Bot &bot, const std::string &token,
+                          const std::string &line, SQLite::Database &db)
 {
     std::istringstream iss(line);
     std::string cmd;
     iss >> cmd;
 
-    if (cmd == "help")
-    {
+    if (cmd == "help") {
         std::cout << "Available commands:\n";
         std::cout << "  send \"user_id\" \"message\"\n";
+        std::cout << "  sendfile \"user_id\" \"absolute_path\"\n";
+        std::cout << "  access \"user_id\" \"default|premium|admin\"\n";
         return;
     }
 
-    if (cmd == "send")
-    {
+    if (cmd == "access") {
+        std::string userIdStr;
+        std::string accessLevel;
+        iss >> userIdStr >> accessLevel;
+        if (userIdStr.empty() || accessLevel.empty()) {
+            std::cout << "Usage: access \"user_id\" \"default|premium|admin\"\n";
+            return;
+        }
+
+        if (userIdStr.size() >= 2 && userIdStr.front() == '"' && userIdStr.back() == '"')
+            userIdStr = userIdStr.substr(1, userIdStr.size() - 2);
+        if (accessLevel.size() >= 2 && accessLevel.front() == '"' && accessLevel.back() == '"')
+            accessLevel = accessLevel.substr(1, accessLevel.size() - 2);
+
+        int access;
+        if (accessLevel == "default") {
+            access = DEFAULT;
+        } else if (accessLevel == "premium") {
+            access = PREMIUM;
+        } else if (accessLevel == "admin") {
+            access = ADMIN;
+        } else {
+            std::cout << "Access level must be default, premium or admin\n";
+            return;
+        }
+
+        const long long userId = std::stoll(userIdStr);
+        setUserAccess(db, userId, access);
+        spdlog::info("Админ изменил уровень доступа пользователя {} на {}", getUsername(db, userId), accessLevel);
+        std::cout << "Access level for user " << userId << " set to " << accessLevel << "\n";
+        return;
+    }
+
+    if (cmd == "send") {
         std::string userIdStr;
         iss >> userIdStr;
-        if (userIdStr.empty())
-        {
+        if (userIdStr.empty()) {
             std::cout << "Usage: send \"user_id\" \"message\"\n";
             return;
         }
@@ -139,26 +168,57 @@ void handleConsoleCommand(Bot &bot, const std::string &line)
             message.erase(0, 1);
 
         if (message.size() >= 2 && message.front() == '"' && message.back() == '"')
-        {
             message = message.substr(1, message.size() - 2);
-        }
 
         const long long userId = std::stoll(userIdStr);
         auto msg = bot.getApi().sendMessage(userId, message);
-        spdlog::info("Sent message to user {}: {}", msg->chat->id, msg->text);
-        spdlog::info("Username: {} First Name: {} Last Name: {}", msg->chat->username, msg->chat->firstName, msg->chat->lastName);
+        spdlog::info("Админ пользователю {}: {}", getUsername(db, userId), msg->text);
         std::cout << "Message sent to user " << userId << "\n";
         return;
     }
 
-    if (!cmd.empty())
-    {
+    if (cmd == "sendfile") {
+        std::string userIdStr;
+        iss >> userIdStr;
+
+        std::string filePath;
+        std::getline(iss, filePath);
+        if (!filePath.empty() && filePath[0] == ' ')
+            filePath.erase(0, 1);
+
+        if (userIdStr.empty() || filePath.empty()) {
+            std::cout << "Usage: sendfile \"user_id\" \"absolute_path\"\n";
+            return;
+        }
+
+        if (filePath.size() >= 2 && filePath.front() == '"' && filePath.back() == '"')
+            filePath = filePath.substr(1, filePath.size() - 2);
+
+        const fs::path path = fs::u8path(filePath);
+        if (!path.is_absolute() || !fs::is_regular_file(path)) {
+            std::cout << "File path must point to an existing regular file with an absolute path\n";
+            return;
+        }
+
+        const long long userId = std::stoll(userIdStr);
+        const std::string fileId = SendDocumentViaLocalServer(
+            "http://127.0.0.1:8081", token, userId, filePath, "");
+        if (fileId.empty()) {
+            std::cout << "Failed to send file to user " << userId << "\n";
+            return;
+        }
+
+        spdlog::info("Админ отправил файл '{}' пользователю {}", filePath, getUsername(db, userId));
+        std::cout << "File sent to user " << userId << "\n";
+        return;
+    }
+
+    if (!cmd.empty()) {
         std::cout << "Unknown command. Type help\n";
     }
 }
 
-int main()
-{
+int main() {
     auto user_logs = spdlog::daily_logger_mt("user_logs", "logs/users/users.txt", 0, 0); // Файл для записи сообщений от пользователей с ежедневной ротацией в 00:00
     user_logs->set_pattern("[%Y-%m-%d %H:%M:%S] %v");                                    // Шаблон для записей в этом файле
 
@@ -174,50 +234,40 @@ int main()
     string YaToken;
     string providerToken;
 
-    try
-    {
+    try {
         token = getRequiredEnv("TELEGRAM_BOT_TOKEN");
         YaToken = getRequiredEnv("YADISK_TOKEN");
         providerToken = getRequiredEnv("TELEGRAM_PAYMENT_PROVIDER_TOKEN");
     }
-    catch (const exception& error)
-    {
+    catch (const exception& error) {
         cerr << "Configuration error: " << error.what() << endl;
-        spdlog::critical("Configuration error: {}", error.what());
+        spdlog::critical("Ошибка переменной среды: {}", error.what());
         spdlog::default_logger()->flush();
         return EXIT_FAILURE;
     }
 
     CurlHttpClient curlHttpClient;
 
-    Bot bot(
-        token,
-        curlHttpClient,
-        "http://127.0.0.1:8081");
-#ifdef _WIN32
+    Bot bot(token, curlHttpClient, "http://127.0.0.1:8081");
+    #ifdef _WIN32
     SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
-#endif
-    thread consoleThread([&bot]()
-                         {
+    #endif
+    thread consoleThread([&bot, &bd, &token]() {
         std::string line;
-        while (std::getline(std::cin, line))
-        {
+        while (std::getline(std::cin, line)) {
             if (line.empty())
                 continue;
-            try
-            {
-                handleConsoleCommand(bot, line);
+            try {
+                handleConsoleCommand(bot, token, line, bd);
             }
-            catch (const std::exception& e)
-            {
+            catch (const std::exception& e) {
                 std::cerr << "Command error: " << e.what() << "\n";
             }
         } });
     consoleThread.detach();
 
-    thread delayedFiles([&bot, &token, &user_logs]()
-                        {
+    thread delayedFiles([&bot, &token, &user_logs]() {
         Database workerDb(
             "database/bot.db",
             SQLite::OPEN_READWRITE
@@ -228,7 +278,6 @@ int main()
                 const vector<pair<int64_t, string>> files = getDelayedFiles(workerDb);
 
                 for (const auto& file : files) {
-                    spdlog::debug("Sending delayed file to user {}: {}", file.first, file.second);
                     const string sentFileId = SendDocumentViaLocalServer(
                         "http://127.0.0.1:8081",
                         token,
@@ -236,7 +285,7 @@ int main()
                         file.second,
                         "application/pdf",
                         "",
-                        "HTML"
+                        "HTML" 
                     );
 
                     if (!sentFileId.empty()) {
@@ -246,15 +295,14 @@ int main()
                         recordDownloadedFileByPath(workerDb, file.first, sourcePath);
                         deleteDelayedFile(workerDb, file.first, file.second);
                         fs::remove(fs::u8path(file.second));
-                        spdlog::info("Sent delayed file to user {}: {}", file.first, file.second);
-                        user_logs->info("Sent delayed file to user {}: {}", file.first, file.second);
+                        spdlog::info("Отправка отложенного файла пользователю {}: {}", file.first, file.second);
+                        user_logs->info("{}| Отправка отложенного файла {}", file.first, file.second.substr(file.second.find_last_of("/\\") + 1));
                     }
                 }
             }
-            catch (const exception& error)
-            {
+            catch (const exception& error) {
                 spdlog::error(
-                    "Error in delayed files thread: {}",
+                    "Ошибка в потоке отложенных файлов: {}",
                     error.what()
                 );
             }
@@ -262,28 +310,20 @@ int main()
             this_thread::sleep_for(chrono::seconds(60));
         } });
 
-    bot.getEvents().onAnyMessage([&bot, &user_logs, &feedback, &bd, &token](Message::Ptr message)
-                                 {
+    bot.getEvents().onAnyMessage([&bot, &user_logs, &feedback, &bd, &token](Message::Ptr message) {
         try {
             user_logs->info("{}: {}", message->from->username.c_str(), message->text.c_str());
             spdlog::info("{}: {}", message->from->username, message->text.c_str());
             string Id = checkId(bd, message->from->id);
                 if (Id.empty()) {
-                    spdlog::info("New user: {}", message->from->username);
-                    string username = message->from->username.empty() ? message->from->firstName + " " + message->from->lastName : "@" +message->from->username;
+                    user_logs->info("{}| новый пользователь", message->from->username);
+                    string username = message->from->username.empty() ? message->from->firstName + " " + message->from->lastName : "@" + message->from->username;
                     addUser(bd, message->from->id, username);
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Далее"});
                 bot.getApi().sendPhoto(message->chat->id, getMediaIdFromDatabase(bd , "logo"),
                 "Добро пожаловать в обновлённую версию бота!\nБот стал быстрее и удобнее, а также получил новые функции.",
                 nullptr, keyboard, "Markdown"
                 );
-                string u = getUsername(bd, message->from->id);
-                if (u == "@mss_gule") {
-                    setUserAccess(bd, message->from->id, ADMIN);
-                }
-                if (u == "@cent1011") {
-                    setUserAccess(bd, message->from->id, PREMIUM);
-                }
                 return;
                 }
             if (UserState(bd, message->chat->id) == FEEDBACK) {
@@ -292,6 +332,7 @@ int main()
                     return;
                 }
                 if (message->text.empty() == false) {
+                    user_logs->info("{}| Оставил отзыв", message->from->username.c_str());
                     feedback->info("{}: {}", message->from->username.c_str(), message->text.c_str());
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Назад"});
                     auto reaction = make_shared<ReactionTypeEmoji>();
@@ -303,14 +344,15 @@ int main()
             }
             if (message->document != nullptr) {
                 const auto file = bot.getApi().getFile(message->document->fileId);
-                user_logs->info("{} sended file: {}", message->chat->username, message->document->fileName);
-                spdlog::info("{} file saved to {}", message->chat->username, file->filePath);
+                user_logs->info("{}| Отправил файл: {}", message->from->username.c_str(), message->document->fileName);
+                spdlog::info("{}| Файл сохранён в {}", message->chat->id, file->filePath);
 
                 if (UserAccess(bd, message->from->id) == ADMIN && message->document->mimeType == "application/pdf") {
                     subject sub(bd, message->document->fileName, getGroupName(bd, message->chat->id));
                     bool upd = !message->caption.empty() && message->caption.find_first_not_of("0123456789") == std::string::npos;
                     if (upd == true) {
-                        spdlog::info("Updating file: {} count {}", message->document->fileName, message->caption);
+                        spdlog::info("Изменение файла: {} номер {}", message->document->fileName, message->caption);
+                        user_logs->info("{}| Изменение файла: {} номер {}", message->from->username.c_str(), message->document->fileName, message->caption);
                         sub.count = stoi(message->caption);
                     }
                     string newFilePath = "files/" + getGroupName(bd, message->chat->id) + "/" + sub.name + " " + (sub.type == 0 ? "Лекция" : "Семинар") + " " + to_string(sub.count) + ".pdf";
@@ -320,7 +362,6 @@ int main()
                         fs::create_directory(fs::u8path("files/" + getGroupName(bd, message->chat->id)));
                     }
                     if (fs::exists(fs::u8path(newFilePath))) {
-                        spdlog::info("File already exists, removing: {}", newFilePath);
                         fs::remove(fs::u8path(newFilePath));
                     }
                     fs::rename(fs::u8path(file->filePath), fs::u8path(newFilePath));
@@ -353,8 +394,8 @@ int main()
                 string fileId;
                 while (fileId.empty()) {
                     fileId = bot.getApi().getFile(message->photo.back()->fileId)->filePath;
-                    user_logs->info("{} sended photo: {}", message->chat->username, fileId);
-                    spdlog::info("File saved to {}", fileId);
+                    user_logs->info("{}| Отправил фото: {}", message->from->username.c_str(), fileId);
+                    spdlog::info("{}| Отправил фото: {}", message->chat->id, fileId);
                 }
                 bot.getApi().sendMessage(message->chat->id, "Эмм... ладно, спасибо, я посмотрю на досуге");
             }
@@ -369,8 +410,7 @@ int main()
     bot.getEvents().onCallbackQuery([&bot, &user_logs, &bd, &token, &YaToken, &providerToken](CallbackQuery::Ptr query) {
         try {
         bool callbackAnswered = false;
-        user_logs->info("{}: {}", query->from->username.c_str(), query->data.c_str());
-        spdlog::info("{}: {}", query->from->username.c_str(), query->data.c_str());
+        spdlog::info("{}: {}", query->from->id, query->data.c_str());
         if (checkId(bd, query->from->id) == "") {
             bot.getApi().sendMessage(query->from->id, "Предыдущие команды не работают, введите /start");
             return;
@@ -378,8 +418,8 @@ int main()
         if (query->message->messageId != getLastMenuMessageId(bd, query->from->id) && UserState(bd, query->from->id) > REGISTRATION) {
             bot.getApi().answerCallbackQuery(query->id, "Это меню устарело, используйте актуальное");
             deleteMessageIfExists(bot, query->message->chat->id, query->message->messageId);
-            spdlog::info("Deleted outdated menu message for user {}: {}", query->from->username, query->message->messageId);
-            user_logs->info("Deleted outdated menu message for user {}", query->from->username);
+            user_logs->info("{}| Удалено старое меню", query->from->username.c_str(), query->message->messageId);
+            spdlog::info("{}| Удалено старое меню {}", query->from->id, query->message->messageId);
             return;
         }
         if (query->data == "Назад" && UserState(bd, query->from->id) > START) setUserState(bd, query->from->id, START);
@@ -391,7 +431,7 @@ int main()
                         "• Удаление вотермарок\n"
                         "• Быстрая загрузка\n"
                         "• Возможность выбора интервала лекций\n"
-                        "• Подписки\n"
+                        "• Подписки на предметы\n"
                         "• Уведомления об изменённых материалах\n"
                         "• Альтернативный способ загрузки"
                     );
@@ -502,7 +542,7 @@ int main()
                 }
                 if (query->data == "Администраторская") {
                     setUserState(bd, query->from->id, ADMINISTRATION);
-                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Удалить последний файл", "Изменить файл", "Логи", "Назад"});
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Удалить последний файл", "Логи", "Назад"});
                     InputMediaPhoto::Ptr media = MessageMedia(
                         getMediaIdFromDatabase(bd , "admin"), "Панель управления ботом"
                     );
@@ -543,7 +583,7 @@ int main()
                 bot.getApi().answerCallbackQuery(query->id, !enabled ? "Подписка оформлена" : "Подписка отменена");
                 return;
             }
-            if (query->data._Starts_with("list:")){
+            if (query->data.starts_with("list:")){
                 string subject_name = query->data.substr(5, query->data.find(':', 5) - 5);
                 string group_name = query->data.substr(query->data.rfind(':') + 1);
                 int8_t count = getFileCount(bd, subject_name, fileType, group_name);
@@ -570,7 +610,7 @@ int main()
                 string text = subjectType + "->" + subject_name + "->" + group_name;
                 bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, text, "", keyboard);
             }
-            if (query->data._Starts_with("download:")) {
+            if (query->data.starts_with("download:")) {
                 string subject_type = query->message->caption.substr(0, query->message->caption.find("->"));
                 string subject_name = query->message->caption.substr(query->message->caption.find("->") + 2, query->message->caption.rfind("->") - query->message->caption.find("->") - 2);
                 string group_name = query->message->caption.substr(query->message->caption.rfind("->") + 2);
@@ -628,7 +668,7 @@ int main()
                         fs::remove(fs::u8path(filePath));
                     } else {
                         bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
-                        spdlog::error("Failed to upload merged file to Yandex Disk: {}", filePath);
+                        spdlog::error("Ошибка загрузки полного файла на Яндекс.Диск: {}", filePath);
                     }
                 } else {
                 string response = SendDocumentViaLocalServer(
@@ -645,7 +685,7 @@ int main()
                     fs::remove(fs::u8path(filePath));
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
-                    spdlog::error("Failed to send merged file: {}", filePath);
+                    spdlog::error("Ошибка отправки полного файла: {}", filePath);
                 }
             }
             }
@@ -723,7 +763,7 @@ int main()
                         fs::remove(fs::u8path(filePath));
                     } else {
                         bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
-                        spdlog::error("Failed to upload merged file to Yandex Disk: {}", filePath);
+                        spdlog::error("Ошибка загрузки объединенного файла на Яндекс.Диск: {}", filePath);
                     }
                 } else {
                 string response = SendDocumentViaLocalServer(
@@ -740,7 +780,7 @@ int main()
                     fs::remove(fs::u8path(filePath));
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
-                    spdlog::error("Failed to send merged file: {}", filePath);
+                    spdlog::error("Ошибка отправки объединенного файла: {}", filePath);
                 }
             }
                 
@@ -801,7 +841,6 @@ int main()
                     ), query->message->chat->id, query->message->messageId, "", keyboard);
                 }
                 if (query->data.find("Альтернативная загрузка") != string::npos) {
-                    spdlog::info("User {} toggled alternative download", query->from->username);
                     changeUserAlternativeDownload(bd, query->from->id);
                     if (getUserFolder(bd, query->from->id).empty() == true) {
                         string username = "app:/" + (getUsername(bd, query->from->id).starts_with("@") ? getUsername(bd, query->from->id) : to_string(query->from->id));
@@ -892,6 +931,8 @@ int main()
                     text += "• Удаление вотермарок\n"
                         "• Быстрая загрузка\n"
                         "• Возможность выбора интервала лекций\n"
+                        "• Подписки на предметы\n"
+                        "• Уведомления об изменённых материалах\n"
                         "• Альтернативный способ загрузки";
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
                     auto media = MessageMedia(getMediaIdFromDatabase(bd , "premium"), text);
@@ -934,10 +975,6 @@ int main()
                 if (query->data == "Удалить последний файл") {
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended({{"Лекции", "Del:Lecture"}, {"Семинары", "Del:Seminar"}, {"Назад", "Назад"}});
                     bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите тип файла для удаления", "", keyboard);
-                }
-                if (query->data == "Изменить файл") {
-                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Назад"});
-                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Чтобы изменить загруженный файл, одним сообщением пришлите новый файл и номер", "", keyboard);
                 }
                 if (query->data.starts_with("Del:")) {
                     vector<pair<string,string>> buttons = delSubjectsByFiles(bd, query->data.substr(4), getGroupName(bd, query->from->id));
@@ -1023,7 +1060,7 @@ int main()
         spdlog::error(e.what());
     } });
     bot.getEvents().onCommand("start", [&bot, &bd](Message::Ptr message) { // Стартовое меню
-        spdlog::info("User {} started the bot", message->from->username);
+        spdlog::info("{}| Стартовое меню", message->from->id);
         if (UserState(bd, message->from->id) == REGISTRATION)
             return;
         vector<string> buttons = {"Лекции", "Семинары", "Настройки"};
@@ -1056,17 +1093,19 @@ int main()
                     ? ""
                     : "Невозможно обработать платёж"
             );
+            spdlog::info("{}| Предварительный запрос оплаты состояние = {}", checkout->from->id, valid);
         }
     );
 
-    bot.getEvents().onSuccessfulPayment([&bd, &bot](Message::Ptr message, SuccessfulPayment::Ptr payment)
+    bot.getEvents().onSuccessfulPayment([&bd, &bot, &user_logs](Message::Ptr message, SuccessfulPayment::Ptr payment)
                                         {
-            spdlog::info("Successful payment: user={}, telegram_id={}, provider_id={}", message->from->id, payment->telegramPaymentChargeId, payment->providerPaymentChargeId);
+            spdlog::info("{}| Успешная оплата: user={}, telegram_id={}, provider_id={}", message->from->id, message->from->id, payment->telegramPaymentChargeId, payment->providerPaymentChargeId);
             if (payment->invoicePayload != "premium_2026" ||
                 payment->currency != "RUB" ||
                 payment->totalAmount != PRICE) {
                 return;
             }
+            user_logs->info("{}| Успешная оплата", getUsername(bd, message->from->id));
             setUserAccess(bd, message->from->id, PREMIUM);
             setProviderData(bd, message->from->id,
                 payment->providerPaymentChargeId);
@@ -1075,6 +1114,7 @@ int main()
                 "• Быстрая загрузка\n"
                 "• Возможность выбора интервала лекций\n"
                 "• Подписки на предметы\n"
+                "• Уведомления об изменённых материалах\n"
                 "• Альтернативный способ загрузки";
             InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Назад"});
             auto media = MessageMedia(getMediaIdFromDatabase(bd , "premium"), text);

@@ -28,7 +28,7 @@ void subject::update(Database &bd, string file_id, string file_path, string grou
     update_query.bind(5, group_name);
     update_query.bind(6, count);
     update_query.exec();
-    spdlog::info("Updated file '{}' of type {} with count {} in group '{}'", name, type, count, group_name);
+    spdlog::debug("Updated file: '{}' of type {} with count {} in group '{}'", name, type, count, group_name);
 }
 
 subject::subject(Database &bd, string file_name, string group_name) {
@@ -36,7 +36,7 @@ subject::subject(Database &bd, string file_name, string group_name) {
         file_name.find("Лекция") == string::npos ? type = 1 : type = 0;
         count = getFileCount(bd, name, type, group_name);
         count++;
-        spdlog::info("Created subject: name='{}', type={}, count={}", name, type, count);
+        spdlog::debug("Created subject: name='{}', type={}, count={}", name, type, count);
     }
 
     
@@ -54,7 +54,7 @@ int addUser(Database &db, int64_t chat_id, const string& username) {
     query.bind(1, chat_id);
     query.bind(2, username);
     query.exec();
-    spdlog::info("Added new user: {}", username);
+    spdlog::info("Добавлен пользователь: {}", username);
     return 0;
 }
 
@@ -132,8 +132,6 @@ void initDB(Database &db) {
         "PRIMARY KEY (chat_id, file_path)"
         ")"
     );
-    try { db.exec("ALTER TABLE users ADD COLUMN subscription INTEGER DEFAULT 0"); } catch (...) {}
-    try { db.exec("ALTER TABLE users ADD COLUMN notification INTEGER DEFAULT 0"); } catch (...) {}
     db.exec(
         "CREATE TABLE IF NOT EXISTS subscriptions ("
         "chat_id INTEGER, "
@@ -434,12 +432,47 @@ void setSubjectSubscription(Database &db, int64_t chat_id, const string& subject
 }
 
 vector<int64_t> getSubjectSubscribers(Database &db, const string& subject_name, const string& group_name, int8_t type) {
-    SQLite::Statement query(db, "SELECT s.chat_id FROM subscriptions s JOIN users u ON u.chat_id = s.chat_id WHERE u.subscription = 1 AND s.subject_name = ? AND s.group_name = ? AND s.type = ?");
+    SQLite::Statement query(db,
+        "SELECT s.chat_id, u.group_name "
+        "FROM subscriptions s JOIN users u ON u.chat_id = s.chat_id "
+        "WHERE u.subscription = 1 "
+        "AND s.subject_name = ? AND s.group_name = ? AND s.type = ?"
+    );
     query.bind(1, subject_name);
     query.bind(2, group_name);
     query.bind(3, type);
     vector<int64_t> result;
-    while (query.executeStep()) result.push_back(query.getColumn(0).getInt64());
+    while (query.executeStep()) {
+        const int64_t chatId = query.getColumn(0).getInt64();
+        const string userGroup = query.getColumn(1).getString();
+        SQLite::Statement subjectQuery(
+            db,
+            "SELECT 1 FROM \"" + userGroup + "\" "
+            "WHERE subject_name = ? AND type = ? AND group_name = ? LIMIT 1"
+        );
+        subjectQuery.bind(1, subject_name);
+        subjectQuery.bind(2, type);
+        subjectQuery.bind(3, group_name);
+
+        if (subjectQuery.executeStep()) {
+            result.push_back(chatId);
+        } else {
+            SQLite::Statement deleteQuery(
+                db,
+                "DELETE FROM subscriptions "
+                "WHERE chat_id = ? AND subject_name = ? AND type = ? AND group_name = ?"
+            );
+            deleteQuery.bind(1, chatId);
+            deleteQuery.bind(2, subject_name);
+            deleteQuery.bind(3, type);
+            deleteQuery.bind(4, group_name);
+            deleteQuery.exec();
+            spdlog::info(
+                "Canceled stale subscription: user={}, subject='{}', group='{}', type={}",
+                chatId, subject_name, group_name, type
+            );
+        }
+    }
     return result;
 }
 
@@ -596,7 +629,7 @@ void changeUserAlternativeDownload(Database &db, int64_t chat_id) {
         update_query.bind(1, new_status);
         update_query.bind(2, chat_id);
         update_query.exec();
-        spdlog::debug("Changed alternative download status to {} for chat_id {}", new_status, chat_id);
+        spdlog::debug("{}| Альтернативная загрузка: {}", chat_id, new_status == 1 ? "Включена" : "Выключена");
     } else {
         throw runtime_error("Chat not found");
     }
