@@ -83,7 +83,7 @@ void deleteMessageIfExists(Bot &bot, int64_t chatId, int32_t messageId) { // У�
     }
 }
 
-void notifyNewFileSubscribers(Bot &bot, Database &db, const string& token,
+void notifyNewFileSubscribers(Bot &bot, Database &db, std::shared_ptr<spdlog::logger> user_logs, const string& token,
                               const string& subjectName, int8_t type,
                               const string& groupName, const string& filePath) {
     for (const int64_t chatId : getSubjectSubscribers(db, subjectName, groupName, type)) {
@@ -91,14 +91,18 @@ void notifyNewFileSubscribers(Bot &bot, Database &db, const string& token,
             SendDocumentViaLocalServer("http://127.0.0.1:8081", token, chatId,
                                        filePath, "application/pdf",
                                        "Подписка на " + subjectName + " " + (type ? "Лекция" : "Семинар"), "HTML");
+            recordDownloadedFileByPath(db, chatId, filePath);
+            user_logs->info("{}| Подписка {} {}", getUsername(db, chatId), subjectName, type);
+
         }
         catch (const exception& error) {
             spdlog::warn("Не получилось уведомить {} о файле '{}': {}", chatId, filePath, error.what());
+            user_logs->error("{}| Ошибка подписки {} {}", getUsername(db, chatId), subjectName, type);
         }
     }
 }
 
-void notifyUpdatedFileRecipients(Bot &bot, Database &db, const string& token,
+void notifyUpdatedFileRecipients(Bot &bot, Database &db, std::shared_ptr<spdlog::logger> user_logs, const string& token,
                                  const string& subjectName, int8_t type,
                                  const string& groupName, int8_t count,
                                  const string& filePath) {
@@ -107,9 +111,11 @@ void notifyUpdatedFileRecipients(Bot &bot, Database &db, const string& token,
             SendDocumentViaLocalServer("http://127.0.0.1:8081", token, chatId,
                                        filePath, "application/pdf",
                                        "Уведомление об изменении " + subjectName + " " + (type ? "Лекция" : "Семинар"), "HTML");
+            user_logs->info("{}| Уведомление {} {}", getUsername(db, chatId), subjectName, type);
         }
         catch (const exception& error) {
             spdlog::warn("Не получилось уведомить {} о изменённом файле '{}': {}", chatId, filePath, error.what());
+            user_logs->error("{}| Ошибка уведомления {} {}", getUsername(db, chatId), subjectName, type);
         }
     }
 }
@@ -329,7 +335,7 @@ int main() {
             spdlog::info("{}-{}: {}", message->from->username, message->from->id, message->text.c_str());
             string Id = checkId(bd, message->from->id);
                 if (Id.empty()) {
-                    user_logs->info("{}| новый пользователь", message->from->username);
+                    user_logs->info("{}| Новый пользователь", message->from->username);
                     string username = message->from->username.empty() ? message->from->firstName + " " + message->from->lastName : "@" + message->from->username;
                     addUser(bd, message->from->id, username);
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Далее"});
@@ -357,7 +363,7 @@ int main() {
             }
             if (message->document != nullptr) {
                 const auto file = bot.getApi().getFile(message->document->fileId);
-                user_logs->info("{}| Отправил файл: {}", message->from->username.c_str(), message->document->fileName);
+                user_logs->info("{}| Отправил файл {}", message->from->username.c_str(), message->document->fileName);
                 spdlog::info("{}-{}| Файл сохранён в {}", message->from->username, message->from->id, file->filePath);
 
                 if (UserAccess(bd, message->from->id) == ADMIN && message->document->mimeType == "application/pdf") {
@@ -389,13 +395,13 @@ int main() {
                     if (upd == false) {
                         sub.insert(bd, newFilePath, fileId, groupName);
                         if (!fileId.empty()) {
-                            notifyNewFileSubscribers(bot, bd, token, sub.name, sub.type, groupName, newFilePath);
+                            notifyNewFileSubscribers(bot, bd, user_logs, token, sub.name, sub.type, groupName, newFilePath);
                         }
                         bot.getApi().sendMessage(message->chat->id, "Файл успешно добавлен в базу данных");
                     } else {
                         sub.update(bd, fileId, newFilePath, groupName);
                         if (!fileId.empty()) {
-                            notifyUpdatedFileRecipients(bot, bd, token, sub.name, sub.type, groupName, sub.count, newFilePath);
+                            notifyUpdatedFileRecipients(bot, bd, user_logs, token, sub.name, sub.type, groupName, sub.count, newFilePath);
                         }
                         bot.getApi().sendMessage(message->chat->id, "Файл успешно обновлён в базе данных");
                     }
@@ -640,13 +646,25 @@ int main() {
                         string YaPath = "app:/" + dir + "/" + group_name + " " + subject_name + " " + subject_type + " " + to_string(count) + ".pdf";
                         string publicLink = uploadFileToYandexDisk(YaToken, filePath, YaPath);
                         bot.getApi().sendMessage(query->message->chat->id, "Файл доступен по ссылке: " + publicLink);
-                        if (!publicLink.empty())
+                        if (!publicLink.empty()){
                             recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, count);
+                            user_logs->info("{}| Получил ссылку {} {} {}", query->from->username.c_str(), subject_name, subject_type, count);
+                        } else {
+                            bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
+                            spdlog::error("Ошибка загрузки файла на Яндекс.Диск: {}", filePath);
+                            user_logs->error("{}| Не удалось загрузить файл на Яндекс.Диск {} {} {}", query->from->username.c_str(), subject_name, subject_type, count);
+                        }
                     } else {
                         string fileId = getFileId(bd, subject_name, fileType, count, group_name);
                         auto sentMessage = bot.getApi().sendDocument(query->message->chat->id, fileId);
-                        if (sentMessage->document != nullptr)
+                        if (sentMessage->document != nullptr){
                             recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, count);
+                            user_logs->info("{}| Скачал файл {} {} {}", query->from->username.c_str(), subject_name, subject_type, count);
+                        } else {
+                            bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
+                            spdlog::error("Ошибка отправки файла: {}", fileId);
+                            user_logs->error("{}| Не удалось отправить файл {} {} {}", query->from->username.c_str(), subject_name, subject_type, count);
+                        }
                     }
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Файл будет отправлен через 5 минут");
@@ -684,10 +702,12 @@ int main() {
                     if (!publicLink.empty()) {
                         for (int8_t downloadedCount = 1; downloadedCount <= count; downloadedCount++)
                             recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
+                        user_logs->info("{}| Получил ссылку на полный файл {} {}", query->from->username.c_str(), subject_name, subject_type);
                         fs::remove(fs::u8path(filePath));
                     } else {
                         bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
                         spdlog::error("Ошибка загрузки полного файла на Яндекс.Диск: {}", filePath);
+                        user_logs->error("{}| Не удалось загрузить полный файл на Яндекс.Диск {} {}", query->from->username.c_str(), subject_name, subject_type);
                     }
                 } else {
                 string response = SendDocumentViaLocalServer(
@@ -702,10 +722,12 @@ int main() {
                 if (!response.empty()) {
                     for (int8_t downloadedCount = 1; downloadedCount <= count; downloadedCount++)
                         recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
+                    user_logs->info("{}| Скачал полный файл {} {}", query->from->username.c_str(), subject_name, subject_type);
                     fs::remove(fs::u8path(filePath));
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
                     spdlog::error("Ошибка отправки полного файла: {}", filePath);
+                    user_logs->error("{}| Не удалось отправить полный файл {} {}", query->from->username.c_str(), subject_name, subject_type);
                 }
             }
             }
@@ -781,10 +803,12 @@ int main() {
                     if (!publicLink.empty()) {
                         for (int8_t downloadedCount = first; downloadedCount <= second; downloadedCount++)
                             recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
+                        user_logs->info("{}| Получил ссылку {} {} {}-{}", query->from->username.c_str(), subject_name, subject_type, first, second);
                         fs::remove(fs::u8path(filePath));
                     } else {
                         bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
                         spdlog::error("Ошибка загрузки объединенного файла на Яндекс.Диск: {}", filePath);
+                        user_logs->error("{}| Не удалось загрузить объединенный файл на Яндекс.Диск {} {} {}-{}", query->from->username.c_str(), subject_name, subject_type, first, second);
                     }
                 } else {
                 string response = SendDocumentViaLocalServer(
@@ -799,10 +823,12 @@ int main() {
                 if (!response.empty()) {
                     for (int8_t downloadedCount = first; downloadedCount <= second; downloadedCount++)
                         recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
+                    user_logs->error("{}| Скачал файл {} {} {}-{}", query->from->username.c_str(), subject_name, subject_type, first, second);
                     fs::remove(fs::u8path(filePath));
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
                     spdlog::error("Ошибка отправки объединенного файла: {}", filePath);
+                    user_logs->error("{}| Не удалось отправить объединенный файл {} {} {}-{}", query->from->username.c_str(), subject_name, subject_type, first, second);
                 }
             }
                 
@@ -864,7 +890,7 @@ int main() {
                 }
                 if (query->data.find("Альтернативная загрузка") != string::npos) {
                     changeUserAlternativeDownload(bd, query->from->id);
-                    if (getUserFolder(bd, query->from->id).empty() == true) {
+                    if (getUserFolder(bd, query->from->id).empty() == true && UserAlternativeDownload(bd, query->from->id)) {
                         string username = "app:/" + (getUsername(bd, query->from->id).starts_with("@") ? getUsername(bd, query->from->id) : to_string(query->from->id));
                         setUserFolder(bd, query->from->id, publishFolder(YaToken, username));
                     }
@@ -891,10 +917,6 @@ int main() {
                         return;
                     }
                     changeUserSubscription(bd, query->from->id);
-                    if (getUserFolder(bd, query->from->id).empty() == true) {
-                        string username = "app:/" + (getUsername(bd, query->from->id).starts_with("@") ? getUsername(bd, query->from->id) : to_string(query->from->id));
-                        setUserFolder(bd, query->from->id, publishFolder(YaToken, username));
-                    }
                     vector<string> buttons;
                     if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
                         buttons.push_back(UserAlternativeDownload(bd, query->from->id) ? "✅ Альтернативная загрузка" : "⬜ Альтернативная загрузка");
@@ -918,10 +940,6 @@ int main() {
                         return;
                     }
                     changeUserNotification(bd, query->from->id);
-                    if (getUserFolder(bd, query->from->id).empty() == true) {
-                        string username = "app:/" + (getUsername(bd, query->from->id).starts_with("@") ? getUsername(bd, query->from->id) : to_string(query->from->id));
-                        setUserFolder(bd, query->from->id, publishFolder(YaToken, username));
-                    }
                     vector<string> buttons;
                     if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
                         buttons.push_back(UserAlternativeDownload(bd, query->from->id) ? "✅ Альтернативная загрузка" : "⬜ Альтернативная загрузка");

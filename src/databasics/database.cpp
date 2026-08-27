@@ -445,21 +445,6 @@ vector<int64_t> getSubjectSubscribers(Database &db, const string& subject_name, 
 
         if (subjectQuery.executeStep()) {
             result.push_back(chatId);
-        } else {
-            SQLite::Statement deleteQuery(
-                db,
-                "DELETE FROM subscriptions "
-                "WHERE chat_id = ? AND subject_name = ? AND type = ? AND group_name = ?"
-            );
-            deleteQuery.bind(1, chatId);
-            deleteQuery.bind(2, subject_name);
-            deleteQuery.bind(3, type);
-            deleteQuery.bind(4, group_name);
-            deleteQuery.exec();
-            spdlog::info(
-                "Canceled stale subscription: user={}, subject='{}', group='{}', type={}",
-                chatId, subject_name, group_name, type
-            );
         }
     }
     return result;

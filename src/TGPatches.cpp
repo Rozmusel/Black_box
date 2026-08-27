@@ -106,7 +106,7 @@ std::string SendDocumentViaLocalServer(const std::string& apiUrl,
     }
 
     std::filesystem::path absolutePath = std::filesystem::absolute(path);
-    spdlog::info("Resolved document path: {}", pathToUtf8String(absolutePath));
+    spdlog::debug("Resolved document path: {}", pathToUtf8String(absolutePath));
 
     static bool curlInitialized = false;
     if (!curlInitialized) {
@@ -188,7 +188,7 @@ std::string SendDocumentViaLocalServer(const std::string& apiUrl,
             if (fileId.empty()) {
                 spdlog::error("Failed to extract file_id from response: {}", response);
             } else {
-                spdlog::info("SendDocumentViaLocalServer returned file_id: {}", fileId);
+                spdlog::debug("SendDocumentViaLocalServer returned file_id: {}", fileId);
             }
         }
     }
