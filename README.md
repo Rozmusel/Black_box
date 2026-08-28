@@ -105,4 +105,15 @@ cmake --build build
 telegram-bot-api --local --api-id=<api_id> --api-hash=<api_hash> --dir=<path_to_files>
 ```
 
+## Лицензии зависимостей
+
+Проект использует сторонние библиотеки. Тексты их лицензий и уведомления об авторских правах находятся в каталоге [LICENSES](LICENSES/):
+
+* `tgbot-cpp` — MIT
+* `SQLiteCpp` — MIT
+* `spdlog` — MIT
+* `yandex-disk-cpp-client` — MIT
+* `PoDoFo` — LGPL-2.0
+* `cURL` и `nlohmann-json` — лицензии указаны в соответствующих файлах каталога `LICENSES`
+
 ![Logo](media/logo.png)

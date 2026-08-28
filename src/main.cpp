@@ -555,6 +555,11 @@ int main() {
                     string text = "Пользователь: @" + query->from->username + "\n";
                     buttons.push_back("Премиум");
                     buttons.push_back("Назад");
+                    if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
+                        text += "Доступ: Премиум\n";
+                    } else {
+                        text += "Доступ: Обычный\n";
+                    }
                     if (getUserFolder(bd, query->from->id).empty() == false) {
                         text += "\nПапка c вашими загруженными файлами: " + getUserFolder(bd, query->from->id);
                     }
@@ -905,7 +910,12 @@ int main() {
                     string text = "Пользователь: @" + query->from->username + "\n";
                     buttons.push_back("Премиум");
                     buttons.push_back("Назад");
-                    if (getUserFolder(bd, query->from->id).empty() == false) {
+
+                    if (getUserFolder(bd, query->from->id).empty() == false) {if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
+                        text += "Доступ: Премиум\n";
+                    } else {
+                        text += "Доступ: Обычный\n";
+                    }
                         text += "\nПапка c вашими загруженными файлами: " + getUserFolder(bd, query->from->id);
                     }
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
@@ -928,6 +938,11 @@ int main() {
                     string text = "Пользователь: @" + query->from->username + "\n";
                     buttons.push_back("Премиум");
                     buttons.push_back("Назад");
+                    if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
+                        text += "Доступ: Премиум\n";
+                    } else {
+                        text += "Доступ: Обычный\n";
+                    }
                     if (getUserFolder(bd, query->from->id).empty() == false) {
                         text += "\nПапка c вашими загруженными файлами: " + getUserFolder(bd, query->from->id);
                     }
@@ -951,6 +966,11 @@ int main() {
                     string text = "Пользователь: @" + query->from->username + "\n";
                     buttons.push_back("Премиум");
                     buttons.push_back("Назад");
+                    if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
+                        text += "Доступ: Премиум\n";
+                    } else {
+                        text += "Доступ: Обычный\n";
+                    }
                     if (getUserFolder(bd, query->from->id).empty() == false) {
                         text += "\nПапка c вашими загруженными файлами: " + getUserFolder(bd, query->from->id);
                     }
