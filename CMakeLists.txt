@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10.2)
-project(black_box VERSION 1.1.1 LANGUAGES C CXX)
+project(black_box VERSION 1.1.3 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
@@ -11,3 +11,7 @@ if (MSVC)
 endif()
 
 add_subdirectory(src)
+
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/database")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/TGBotAPI")

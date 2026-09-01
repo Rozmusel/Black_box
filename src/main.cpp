@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <chrono>
 #include <set>
+#include <atomic>
 
 #include <tgbot/tgbot.h>    // Библиотеки подключённые через vcpkg
 #include <tgbot/net/CurlHttpClient.h>
@@ -49,6 +50,9 @@ enum UserAccess
 };
 
 #define PRICE 30000 // 300.00 RUB
+
+std::atomic<bool> g_stopRequested{false};
+
 
 void DeadHand(Bot &bot, int64_t chatId, const string& errorText) {
     try {
@@ -164,7 +168,7 @@ void handleConsoleCommand(Bot &bot, const std::string &token,
 
         const long long userId = std::stoll(userIdStr);
         setUserAccess(db, userId, access);
-        spdlog::info("Админ изменил уровень доступа пользователя {}-{} на {}", getUsername(db, userId), userId, accessLevel);
+        spdlog::info("Админ изменил уровень доступа пользователя {} {} на {}", getUsername(db, userId), userId, accessLevel);
         std::cout << "Access level for user " << userId << " set to " << accessLevel << "\n";
         return;
     }
@@ -187,7 +191,7 @@ void handleConsoleCommand(Bot &bot, const std::string &token,
 
         const long long userId = std::stoll(userIdStr);
         auto msg = bot.getApi().sendMessage(userId, message);
-        spdlog::info("Админ пользователю {}-{}: {}", getUsername(db, userId), userId, msg->text);
+        spdlog::info("Админ пользователю {} {}: {}", getUsername(db, userId), userId, msg->text);
         std::cout << "Message sent to user " << userId << "\n";
         return;
     }
@@ -223,7 +227,7 @@ void handleConsoleCommand(Bot &bot, const std::string &token,
             return;
         }
 
-        spdlog::info("Админ отправил файл '{}' пользователю {}-{}", filePath, getUsername(db, userId), userId);
+        spdlog::info("Админ отправил файл '{}' пользователю {} {}", filePath, getUsername(db, userId), userId);
         std::cout << "File sent to user " << userId << "\n";
         return;
     }
@@ -315,7 +319,7 @@ int main() {
                         recordDownloadedFileByPath(workerDb, file.first, sourcePath);
                         deleteDelayedFile(workerDb, file.first, file.second);
                         fs::remove(fs::u8path(file.second));
-                        spdlog::info("Отправка отложенного файла пользователю {}-{}: {}", getUsername(workerDb, file.first), file.first, file.second);
+                        spdlog::info("Отправка отложенного файла пользователю {} {}: {}", getUsername(workerDb, file.first), file.first, file.second);
                         user_logs->info("{}| Отправка отложенного файла {}", file.first, file.second.substr(file.second.find_last_of("/\\") + 1));
                     }
                 }
@@ -332,7 +336,7 @@ int main() {
     bot.getEvents().onAnyMessage([&bot, &user_logs, &feedback, &bd, &token, deadHandChatId](Message::Ptr message) {
         try {
             user_logs->info("{}: {}", message->from->username.c_str(), message->text.c_str());
-            spdlog::info("{}-{}: {}", message->from->username, message->from->id, message->text.c_str());
+            spdlog::info("{} {}: {}", message->from->username, message->from->id, message->text.c_str());
             string Id = checkId(bd, message->from->id);
                 if (Id.empty()) {
                     user_logs->info("{}| Новый пользователь", message->from->username);
@@ -364,7 +368,7 @@ int main() {
             if (message->document != nullptr) {
                 const auto file = bot.getApi().getFile(message->document->fileId);
                 user_logs->info("{}| Отправил файл {}", message->from->username.c_str(), message->document->fileName);
-                spdlog::info("{}-{}| Файл сохранён в {}", message->from->username, message->from->id, file->filePath);
+                spdlog::info("{} {}| Файл сохранён в {}", message->from->username, message->from->id, file->filePath);
 
                 if (UserAccess(bd, message->from->id) == ADMIN && message->document->mimeType == "application/pdf") {
                     subject sub(bd, message->document->fileName, getGroupName(bd, message->chat->id));
@@ -414,7 +418,7 @@ int main() {
                 while (fileId.empty()) {
                     fileId = bot.getApi().getFile(message->photo.back()->fileId)->filePath;
                     user_logs->info("{}| Отправил фото: {}", message->from->username.c_str(), fileId);
-                    spdlog::info("{}-{}| Отправил фото: {}", message->from->username, message->from->id, fileId);
+                    spdlog::info("{} {}| Отправил фото: {}", message->from->username, message->from->id, fileId);
                 }
                 bot.getApi().sendMessage(message->chat->id, "Эмм... ладно, спасибо, я посмотрю на досуге");
             }
@@ -433,7 +437,7 @@ int main() {
     bot.getEvents().onCallbackQuery([&bot, &user_logs, &bd, &token, &YaToken, &providerToken, deadHandChatId](CallbackQuery::Ptr query) {
         try {
         bool callbackAnswered = false;
-        spdlog::info("{}-{}: {}", query->from->username, query->from->id, query->data.c_str());
+        spdlog::info("{} {}: {}", query->from->username, query->from->id, query->data.c_str());
         if (checkId(bd, query->from->id) == "") {
             bot.getApi().sendMessage(query->from->id, "Предыдущие команды не работают, введите /start");
             return;
@@ -442,7 +446,7 @@ int main() {
             bot.getApi().answerCallbackQuery(query->id, "Это меню устарело, используйте актуальное");
             deleteMessageIfExists(bot, query->message->chat->id, query->message->messageId);
             user_logs->info("{}| Удалено старое меню", query->from->username.c_str(), query->message->messageId);
-            spdlog::info("{}-{}| Удалено старое меню {}", query->from->username, query->from->id, query->message->messageId);
+            spdlog::info("{} {}| Удалено старое меню {}", query->from->username, query->from->id, query->message->messageId);
             return;
         }
         if (query->data == "Назад" && UserState(bd, query->from->id) > START) setUserState(bd, query->from->id, START);
@@ -520,8 +524,8 @@ int main() {
                     InputMediaPhoto::Ptr media = MessageMedia(
                         getMediaIdFromDatabase(bd , "freedom"), "Поздравляю, вы получили доступ ко всем материалам.\n"
                         "Чтобы попасть в основное меню, используйте /start\n"
-                        "Настоятельно рекомендуется ознакомиться с репозиторием данного проекта https://github.com/Rozmusel/Black_box\n"
-                        "На главной странице вы найдёте описание всех новых функций, а также, если вы обнаружите неисправность, сообщите о ней во вкладке Issues."
+                        "Настоятельно рекомендуется ознакомиться с репозиторием данного [проекта](https://github.com/Rozmusel/Black\\_box)\n"
+                        "На главной странице вы найдёте описание всех новых функций, а также, если вы обнаружите неисправность, сообщите о ней во вкладке Issues.", "MarkdownV2"
                     );
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId);
                     bot.getApi().answerCallbackQuery(query->id, "Воздух потрескивает от свободы");
@@ -808,12 +812,12 @@ int main() {
                     if (!publicLink.empty()) {
                         for (int8_t downloadedCount = first; downloadedCount <= second; downloadedCount++)
                             recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
-                        user_logs->info("{}| Получил ссылку {} {} {}-{}", query->from->username.c_str(), subject_name, subject_type, first, second);
+                        user_logs->info("{}| Получил ссылку {} {} {} {}", query->from->username.c_str(), subject_name, subject_type, first, second);
                         fs::remove(fs::u8path(filePath));
                     } else {
                         bot.getApi().sendMessage(query->message->chat->id, "Не удалось загрузить файл на Яндекс.Диск");
                         spdlog::error("Ошибка загрузки объединенного файла на Яндекс.Диск: {}", filePath);
-                        user_logs->error("{}| Не удалось загрузить объединенный файл на Яндекс.Диск {} {} {}-{}", query->from->username.c_str(), subject_name, subject_type, first, second);
+                        user_logs->error("{}| Не удалось загрузить объединенный файл на Яндекс.Диск {} {} {} {}", query->from->username.c_str(), subject_name, subject_type, first, second);
                     }
                 } else {
                 string response = SendDocumentViaLocalServer(
@@ -828,12 +832,12 @@ int main() {
                 if (!response.empty()) {
                     for (int8_t downloadedCount = first; downloadedCount <= second; downloadedCount++)
                         recordDownloadedFile(bd, query->message->chat->id, subject_name, group_name, fileType, downloadedCount);
-                    user_logs->error("{}| Скачал файл {} {} {}-{}", query->from->username.c_str(), subject_name, subject_type, first, second);
+                    user_logs->error("{}| Скачал файл {} {} {} {}", query->from->username.c_str(), subject_name, subject_type, first, second);
                     fs::remove(fs::u8path(filePath));
                 } else {
                     bot.getApi().sendMessage(query->message->chat->id, "Не удалось отправить файл");
                     spdlog::error("Ошибка отправки объединенного файла: {}", filePath);
-                    user_logs->error("{}| Не удалось отправить объединенный файл {} {} {}-{}", query->from->username.c_str(), subject_name, subject_type, first, second);
+                    user_logs->error("{}| Не удалось отправить объединенный файл {} {} {} {}", query->from->username.c_str(), subject_name, subject_type, first, second);
                 }
             }
                 
@@ -1125,7 +1129,7 @@ int main() {
     } });
     bot.getEvents().onCommand("start", [&bot, &bd, deadHandChatId](Message::Ptr message) { // Стартовое меню
         try {
-            spdlog::info("{}-{}| Стартовое меню", message->from->username, message->from->id);
+            spdlog::info("{} {}| Стартовое меню", message->from->username, message->from->id);
             if (UserState(bd, message->from->id) == REGISTRATION)
                 return;
             vector<string> buttons = {"Лекции", "Семинары", "Настройки"};
@@ -1166,13 +1170,13 @@ int main() {
                     ? ""
                     : "Невозможно обработать платёж"
             );
-            spdlog::info("{}-{}| Предварительный запрос оплаты состояние = {}", checkout->from->username, checkout->from->id, valid);
+            spdlog::info("{} {}| Предварительный запрос оплаты состояние = {}", checkout->from->username, checkout->from->id, valid);
         }
     );
 
     bot.getEvents().onSuccessfulPayment([&bd, &bot, &user_logs](Message::Ptr message, SuccessfulPayment::Ptr payment)
                                         {
-            spdlog::info("{}-{}| Успешная оплата: user={}-{}, telegram_id={}, provider_id={}", message->from->username, message->from->id, message->from->username, message->from->id, payment->telegramPaymentChargeId, payment->providerPaymentChargeId);
+            spdlog::info("{} {}| Успешная оплата: user={} {}, telegram_id={}, provider_id={}", message->from->username, message->from->id, message->from->username, message->from->id, payment->telegramPaymentChargeId, payment->providerPaymentChargeId);
             if (payment->invoicePayload != "premium_2026" ||
                 payment->currency != "RUB" ||
                 payment->totalAmount != PRICE) {
@@ -1196,9 +1200,10 @@ int main() {
 
     signal(SIGINT, [](int s)
            {
-        spdlog::info("Завершение программы");
+        spdlog::info("Запущено завершение программы");
         spdlog::default_logger()->flush();
-        exit(0); });
+        g_stopRequested.store(true, std::memory_order_relaxed);
+    });
 
     try
     {
@@ -1206,10 +1211,15 @@ int main() {
         bot.getApi().deleteWebhook();
 
         TgLongPoll longPoll(bot);
-        while (true)
+        while (!g_stopRequested.load(std::memory_order_relaxed))
         {
             spdlog::trace("Long poll started");
             longPoll.start();
+            if (g_stopRequested.load(std::memory_order_relaxed)) {
+                spdlog::debug("Получен сигнал завершения работы");
+                spdlog::default_logger()->flush();
+                break;
+            }
         }
     }
     catch (const exception &error)
@@ -1218,6 +1228,9 @@ int main() {
         spdlog::critical(errorText);
         DeadHand(bot, deadHandChatId, errorText);
     }
+
+    spdlog::info("Программа завершила работу");
+    spdlog::default_logger()->flush();
 
     return 0;
 }

@@ -198,13 +198,13 @@ std::string SendDocumentViaLocalServer(const std::string& apiUrl,
     return fileId;
 }
 
-InputMediaPhoto::Ptr MessageMedia(const string& mediaId, const string& caption) {
+InputMediaPhoto::Ptr MessageMedia(const string& mediaId, const string& caption, const string& parseMode) {
     spdlog::debug("Building message media");
 
     InputMediaPhoto::Ptr media = std::make_shared<InputMediaPhoto>();
     media->media = mediaId;
     media->caption = caption;
-    media->parseMode = "HTML";
+    media->parseMode = parseMode;
     media->hasSpoiler = false;
     return media;
 }
