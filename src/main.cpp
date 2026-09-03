@@ -53,6 +53,9 @@ enum UserAccess
 
 std::atomic<bool> g_stopRequested{false};
 
+void handleShutdownSignal(int) {
+    g_stopRequested.store(true, std::memory_order_release);
+}
 
 void DeadHand(Bot &bot, int64_t chatId, const string& errorText) {
     try {
@@ -313,7 +316,7 @@ int main() {
             SQLite::OPEN_READWRITE
         );
 
-        while (true) {
+        while (!g_stopRequested.load(std::memory_order_acquire)) {
             try {
                 const vector<pair<int64_t, string>> files = getDelayedFiles(workerDb);
 
@@ -347,7 +350,10 @@ int main() {
             }
 
             this_thread::sleep_for(chrono::seconds(60));
-        } });
+        }
+
+        spdlog::info("Поток отложенных файлов завершён");
+    });
 
     bot.getEvents().onAnyMessage([&bot, &user_logs, &feedback, &bd, &token, deadHandChatId](Message::Ptr message) {
         try {
@@ -1214,12 +1220,11 @@ int main() {
             bot.getApi().editMessageMedia(media, message->chat->id, getLastMenuMessageId(bd, message->from->id), "", keyboard);
             });
 
-    signal(SIGINT, [](int s)
-           {
-        spdlog::info("Запущено завершение программы");
-        spdlog::default_logger()->flush();
-        g_stopRequested.store(true, std::memory_order_relaxed);
-    });
+    std::signal(SIGINT, handleShutdownSignal);
+    std::signal(SIGTERM, handleShutdownSignal);
+#ifdef SIGBREAK
+    std::signal(SIGBREAK, handleShutdownSignal);
+#endif
 
     try
     {
@@ -1227,12 +1232,12 @@ int main() {
         bot.getApi().deleteWebhook();
 
         TgLongPoll longPoll(bot);
-        while (!g_stopRequested.load(std::memory_order_relaxed))
+        while (!g_stopRequested.load(std::memory_order_acquire))
         {
             spdlog::trace("Long poll started");
             longPoll.start();
-            if (g_stopRequested.load(std::memory_order_relaxed)) {
-                spdlog::debug("Получен сигнал завершения работы");
+            if (g_stopRequested.load(std::memory_order_acquire)) {
+                spdlog::info("Получен сигнал завершения работы");
                 spdlog::default_logger()->flush();
                 break;
             }
@@ -1243,6 +1248,10 @@ int main() {
         const string errorText = "Критическая ошибка long poll:\n" + string(error.what());
         spdlog::critical(errorText);
         DeadHand(bot, deadHandChatId, errorText);
+    }
+
+    if (delayedFiles.joinable()) {
+        delayedFiles.join();
     }
 
     spdlog::info("Программа завершила работу");
