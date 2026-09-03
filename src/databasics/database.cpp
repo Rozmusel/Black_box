@@ -668,3 +668,10 @@ void setProviderData(Database &db, int64_t chat_id, const string& provider_data)
     spdlog::debug("Changed provider data to '{}' for chat_id {}", provider_data, chat_id);
 }
 
+void deleteUser(Database &db, int64_t chat_id) {
+    spdlog::debug("Deleting user with chat_id {}", chat_id);
+    SQLite::Statement delete_query(db, "DELETE FROM users WHERE chat_id = ?");
+    delete_query.bind(1, chat_id);
+    delete_query.exec();
+    spdlog::debug("Deleted user with chat_id {}", chat_id);
+}

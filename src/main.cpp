@@ -137,6 +137,7 @@ void handleConsoleCommand(Bot &bot, const std::string &token,
         std::cout << "  send \"user_id\" \"message\"\n";
         std::cout << "  sendfile \"user_id\" \"absolute_path\"\n";
         std::cout << "  access \"user_id\" \"default|premium|admin\"\n";
+        std::cout << "  delete \"user_id\"\n";
         return;
     }
 
@@ -229,6 +230,21 @@ void handleConsoleCommand(Bot &bot, const std::string &token,
 
         spdlog::info("Админ отправил файл '{}' пользователю {} {}", filePath, getUsername(db, userId), userId);
         std::cout << "File sent to user " << userId << "\n";
+        return;
+    }
+
+    if(cmd == "delete") {
+        std::string userIdStr;
+        iss >> userIdStr;
+        if (userIdStr.empty()) {
+            std::cout << "Usage: delete \"user_id\"\n";
+            return;
+        }
+
+        const long long userId = std::stoll(userIdStr);
+        deleteUser(db, userId);
+        spdlog::info("Админ удалил пользователя {} {}", getUsername(db, userId), userId);
+        std::cout << "User " << userId << " deleted\n";
         return;
     }
 

@@ -61,3 +61,4 @@ vector<int64_t> getSubjectSubscribers(Database &db, const string& subject_name, 
 vector<int64_t> getFileNotificationRecipients(Database &db, const string& subject_name, const string& group_name, int8_t type, int8_t count);
 void recordDownloadedFile(Database &db, int64_t chat_id, const string& subject_name, const string& group_name, int8_t type, int8_t count);
 void recordDownloadedFileByPath(Database &db, int64_t chat_id, const string& file_path);
+void deleteUser(Database &db, int64_t chat_id);
