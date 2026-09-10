@@ -336,6 +336,15 @@ vector<pair<string,string>> delSubjectsByFiles(Database &db, const string& type,
             "delete:" + name + ":" + (file_type == 0 ? "Lecture" : "Seminar") + ":" + group_name
         });
     }
+    SQLite::Statement check_query(db, "SELECT COUNT(*) FROM files WHERE type = ? AND group_name = ?");
+    check_query.bind(1, type == "Lecture" ? 0 : 1);
+    check_query.bind(2, group_name);
+    check_query.executeStep();
+    if(check_query.getColumn(0).getInt() == 0) {
+        SQLite::Statement delete_query(db, "DELETE FROM \"" + group_name + "\" WHERE type = ?");
+        delete_query.bind(1, type == "Lecture" ? 0 : 1);
+        delete_query.exec();
+    }
     return subjects;
 }
 

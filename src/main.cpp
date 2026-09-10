@@ -457,15 +457,21 @@ int main() {
         } });
 
     bot.getEvents().onCallbackQuery([&bot, &user_logs, &bd, &token, &YaToken, &providerToken, deadHandChatId](CallbackQuery::Ptr query) {
-        try {
         bool callbackAnswered = false;
+        auto answerCallback = [&](const string& text = string()) {
+            if (!callbackAnswered) {
+                bot.getApi().answerCallbackQuery(query->id, text);
+                callbackAnswered = true;
+            }
+        };
+        try {
         spdlog::info("{} {}: {}", query->from->username, query->from->id, query->data.c_str());
         if (checkId(bd, query->from->id) == "") {
             bot.getApi().sendMessage(query->from->id, "Предыдущие команды не работают, введите /start");
             return;
         }
         if (query->message->messageId != getLastMenuMessageId(bd, query->from->id) && UserState(bd, query->from->id) > REGISTRATION) {
-            bot.getApi().answerCallbackQuery(query->id, "Это меню устарело, используйте актуальное");
+            answerCallback("Это меню устарело, используйте актуальное");
             deleteMessageIfExists(bot, query->message->chat->id, query->message->messageId);
             user_logs->info("{}| Удалено старое меню", query->from->username.c_str(), query->message->messageId);
             spdlog::info("{} {}| Удалено старое меню {}", query->from->username, query->from->id, query->message->messageId);
@@ -504,7 +510,7 @@ int main() {
                 );
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId, "", keyboard);
                     //setUserStatus(query->from->id, 1)  // ставим статус
-                    bot.getApi().answerCallbackQuery(query->id, "[[A Great Deal]]");
+                    answerCallback("[[A Great Deal]]");
                 }
                 if (query->data == "Отклонить") {
                     InlineKeyboardMarkup::Ptr keyboard = RowKeyboard({"Назад"});
@@ -550,7 +556,7 @@ int main() {
                         "На главной странице вы найдёте описание всех новых функций, а также, если вы обнаружите неисправность, сообщите о ней во вкладке Issues.", "MarkdownV2"
                     );
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId);
-                    bot.getApi().answerCallbackQuery(query->id, "Воздух потрескивает от свободы");
+                    answerCallback("Воздух потрескивает от свободы");
                 }
             break;
             case START:
@@ -616,6 +622,7 @@ int main() {
             case SEMINAR:
             case LECTURE:
             {
+            answerCallback();
             const bool isLecture = UserState(bd, query->from->id) == LECTURE;
             const int8_t fileType = isLecture ? 0 : 1;
             const string subjectType = isLecture ? "лекция" : "семинар";
@@ -624,7 +631,7 @@ int main() {
             if (query->data == "subscribe" || query->data == "unsubscribe") {
                 if (UserAccess(bd, query->from->id) < PREMIUM ||
                     (query->data == "subscribe" && !UserSubscription(bd, query->from->id))) {
-                    bot.getApi().answerCallbackQuery(query->id, "Сначала включите подписку в настройках");
+                    answerCallback("Сначала включите подписку в настройках");
                     return;
                 }
                 const size_t firstArrow = query->message->caption.find("->");
@@ -635,7 +642,7 @@ int main() {
                 const string groupName = query->message->caption.substr(lastArrow + 2);
                 const bool enabled = UserSubjectSubscription(bd, query->from->id, subjectName, groupName, fileType) == 1;
                 setSubjectSubscription(bd, query->from->id, subjectName, groupName, fileType, !enabled);
-                bot.getApi().answerCallbackQuery(query->id, !enabled ? "Подписка оформлена" : "Подписка отменена");
+                answerCallback(!enabled ? "Подписка оформлена" : "Подписка отменена");
                 return;
             }
             if (query->data.starts_with("list:")){
@@ -817,7 +824,7 @@ int main() {
                 first = stoi(query->data.substr(query->data.find(":") + 1, query->data.find("->") - query->data.find(":")));
                 second = stoi(query->data.substr(query->data.find("->") + 2));
                 if (first == second) {
-                    bot.getApi().answerCallbackQuery(query->id, "Вы выбрали один и тот же файл");
+                    answerCallback("Вы выбрали один и тот же файл");
                     return;
                 }
                 vector<string> files;
@@ -884,7 +891,7 @@ int main() {
                     string text;
                     if(UserAccess(bd, query->message->chat->id) <= PREMIUM) {
                         setUserGroup(bd, query->from->id, query->data.c_str());
-                        bot.getApi().answerCallbackQuery(query->id, "Вы присоединились к филиалу " + query->data);
+                        answerCallback("Вы присоединились к филиалу " + query->data);
                     } else {
                         vector<pair<string,string>> buttons = compareGroupsBySubjects(bd, getGroupName(bd, query->from->id), query->data);
                         if (buttons.empty()) {
@@ -899,7 +906,7 @@ int main() {
                 }
                 if (query->data.starts_with("delete") || query->data.starts_with("insert")) {
                     if (UserAccess(bd, query->message->chat->id) < ADMIN) {
-                        bot.getApi().answerCallbackQuery(query->id, "Функция не доступна");
+                        answerCallback("Функция не доступна");
                         return;
                     }
                     executeCallback(bd, query->data);
@@ -949,7 +956,7 @@ int main() {
                 }
                 if (query->data.find("Подписка") != string::npos) {
                     if (UserAccess(bd, query->message->chat->id) < PREMIUM) {
-                        bot.getApi().answerCallbackQuery(query->id, "Функция не доступна");
+                        answerCallback("Функция не доступна");
                         return;
                     }
                     changeUserSubscription(bd, query->from->id);
@@ -977,7 +984,7 @@ int main() {
                 }
                 if (query->data.find("Уведомления") != string::npos) {
                     if (UserAccess(bd, query->message->chat->id) < PREMIUM) {
-                        bot.getApi().answerCallbackQuery(query->id, "Функция не доступна");
+                        answerCallback("Функция не доступна");
                         return;
                     }
                     changeUserNotification(bd, query->from->id);
@@ -1026,7 +1033,7 @@ int main() {
                 }
                 if (query->data == "💵 Оплатить 300₽") {
                     if (UserAccess(bd, query->message->chat->id) >= PREMIUM) {
-                        bot.getApi().answerCallbackQuery(query->id, "Вы уже приобрели премиум подписку");
+                        answerCallback("Вы уже приобрели премиум подписку");
                         return;
                     }
                     auto price = make_shared<LabeledPrice>();
@@ -1053,7 +1060,7 @@ int main() {
                         false, // sendPhoneNumberToProvider
                         true   // sendEmailToProvider
                     );
-                    bot.getApi().answerCallbackQuery(query->id);
+                    answerCallback();
                     return;
                 }
             break;
@@ -1072,7 +1079,6 @@ int main() {
                     deleteLastSubject(bd, query->data.substr(7));
                     size_t end = query->data.rfind(':');
                     size_t start = query->data.rfind(':', end - 1);
-                    delSubjectsByFiles(bd, query->data.substr(start + 1, end - start - 1), getGroupName(bd, query->from->id));
                     vector<pair<string,string>> buttons = delSubjectsByFiles(bd, query->data.substr(start + 1, end - start - 1), getGroupName(bd, query->from->id));
                     buttons.push_back({"Назад", "Назад"});
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended(buttons);
@@ -1101,7 +1107,7 @@ int main() {
                     string filePath = "logs/users/users_" + stringDate(0) + ".txt";
                     if (!fs::exists(fs::u8path(filePath))) {
                         bot.getApi().sendMessage(query->message->chat->id, "Пользовательский лог за сегодня ещё не создан");
-                        bot.getApi().answerCallbackQuery(query->id);
+                        answerCallback();
                         return;
                     }
                     SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
@@ -1114,7 +1120,7 @@ int main() {
                     string filePath = "logs/users/users_" + stringDate(-24) + ".txt";
                     if (!fs::exists(fs::u8path(filePath))) {
                         bot.getApi().sendMessage(query->message->chat->id, "Пользовательский лог за вчера не найден");
-                        bot.getApi().answerCallbackQuery(query->id);
+                        answerCallback();
                         return;
                     }
                     SendDocumentViaLocalServer("http://127.0.0.1:8081", token,
@@ -1137,9 +1143,7 @@ int main() {
                 }
             break;
         }
-        if (!callbackAnswered) {
-            bot.getApi().answerCallbackQuery(query->id);
-        }
+        answerCallback();
     }
     catch (const exception &error) {
         const string errorText = "Ошибка callback-запроса от " +
@@ -1147,9 +1151,16 @@ int main() {
             ":\n" + error.what();
         spdlog::error(errorText);
         DeadHand(bot, deadHandChatId, errorText);
-        bot.getApi().answerCallbackQuery(query->id, "Возникла ошибка, попробуйте позже");
+        if (!callbackAnswered) {
+            try {
+                answerCallback("Возникла ошибка, попробуйте позже");
+            }
+            catch (const exception& callbackError) {
+                spdlog::warn("Не удалось подтвердить callback после ошибки: {}", callbackError.what());
+            }
+        }
     } });
-    bot.getEvents().onCommand("start", [&bot, &bd, deadHandChatId](Message::Ptr message) { // Стартовое меню
+    bot.getEvents().onCommand("start", [&bot, &bd, deadHandChatId] (Message::Ptr message) { // Стартовое меню
         try {
             spdlog::info("{} {}| Стартовое меню", message->from->username, message->from->id);
             if (UserState(bd, message->from->id) == REGISTRATION)
