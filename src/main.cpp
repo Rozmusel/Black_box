@@ -623,7 +623,7 @@ int main() {
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId, "", keyboard);
                 }
                 if (query->data == "Назад") {
-                    vector<string> buttons = {"Лекции", "Семинары", "Настройки"};
+                    vector<string> buttons = {"Лекции", "Семинары", "Архив", "Настройки"};
                     if (UserAccess(bd, query->message->chat->id) == ADMIN) buttons.push_back("Администраторская");    // isUserAdmin(message->from->id)
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
                     InputMediaPhoto::Ptr media = MessageMedia(
@@ -718,6 +718,7 @@ int main() {
                         }
                     }
                 } else {
+                    answerCallback();
                     bot.getApi().sendMessage(query->message->chat->id, "Файл будет отправлен через 5 минут");
                     const int64_t scheduledAt = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now().time_since_epoch()).count() + 5;
                     string path = getFilePath(bd, subject_name, fileType, count, group_name);
