@@ -11,6 +11,8 @@
 #include <chrono>
 #include <set>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 #include <tgbot/tgbot.h>    // Библиотеки подключённые через vcpkg
 #include <tgbot/net/CurlHttpClient.h>
@@ -40,7 +42,8 @@ enum UserStatus
     SEMINAR,
     SETTINGS,
     ADMINISTRATION,
-    FEEDBACK
+    FEEDBACK,
+    ARCHIVE
 };
 enum UserAccess
 {
@@ -52,6 +55,8 @@ enum UserAccess
 #define PRICE 30000 // 300.00 RUB
 
 std::atomic<bool> g_stopRequested{false};
+std::condition_variable g_shutdownCondition;
+std::mutex g_shutdownMutex;
 
 void handleShutdownSignal(int) {
     g_stopRequested.store(true, std::memory_order_release);
@@ -332,11 +337,11 @@ int main() {
                     );
 
                     if (!sentFileId.empty()) {
+                        deleteDelayedFile(workerDb, file.first, file.second);
                         const string sourcePath = file.second.starts_with("temp/")
                             ? file.second.substr(5)
                             : file.second;
                         recordDownloadedFileByPath(workerDb, file.first, sourcePath);
-                        deleteDelayedFile(workerDb, file.first, file.second);
                         fs::remove(fs::u8path(file.second));
                         spdlog::info("Отправка отложенного файла пользователю {} {}: {}", getUsername(workerDb, file.first), file.first, file.second);
                         user_logs->info("{}| Отправка отложенного файла {}", file.first, file.second.substr(file.second.find_last_of("/\\") + 1));
@@ -349,7 +354,10 @@ int main() {
                 DeadHand(bot, deadHandChatId, errorText);
             }
 
-            this_thread::sleep_for(chrono::seconds(60));
+            std::unique_lock<std::mutex> lock(g_shutdownMutex);
+            g_shutdownCondition.wait_for(lock, chrono::seconds(60), [] {
+                return g_stopRequested.load(std::memory_order_acquire);
+            });
         }
 
         spdlog::info("Поток отложенных файлов завершён");
@@ -552,8 +560,8 @@ int main() {
                     InputMediaPhoto::Ptr media = MessageMedia(
                         getMediaIdFromDatabase(bd , "freedom"), "Поздравляю, вы получили доступ ко всем материалам.\n"
                         "Чтобы попасть в основное меню, используйте /start\n"
-                        "Настоятельно рекомендуется ознакомиться с репозиторием данного [проекта](https://github.com/Rozmusel/Black\\_box)\n"
-                        "На главной странице вы найдёте описание всех новых функций, а также, если вы обнаружите неисправность, сообщите о ней во вкладке Issues.", "MarkdownV2"
+                        "Настоятельно рекомендуется ознакомиться с репозиторием данного проекта https://github.com/Rozmusel/Black_box\n"
+                        "На главной странице вы найдёте описание всех новых функций, а также, если вы обнаружите неисправность, сообщите о ней во вкладке Issues."
                     );
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId);
                     answerCallback("Воздух потрескивает от свободы");
@@ -600,6 +608,11 @@ int main() {
                         getMediaIdFromDatabase(bd , "peter"), text
                     );
                     bot.getApi().editMessageMedia(media, query->message->chat->id, query->message->messageId, "", keyboard);
+                }
+                if (query->data == "Архив"){
+                    setUserState(bd, query->from->id, ARCHIVE);
+                    InlineKeyboardMarkup::Ptr keyboard = ColKeyboard({"Семестр 3", "Семестр 4", "Назад"});
+                    bot.getApi().editMessageCaption(query->message->chat->id, query->message->messageId, "Выберите архивный семестр", "", keyboard);
                 }
                 if (query->data == "Администраторская") {
                     setUserState(bd, query->from->id, ADMINISTRATION);
@@ -1064,6 +1077,13 @@ int main() {
                     return;
                 }
             break;
+            case ARCHIVE:
+            if(query->data == "Семестр 3") {
+                bot.getApi().sendDocument(query->message->chat->id, getMediaIdFromDatabase(bd , "sem3"), "application/pdf");
+            }
+            if(query->data == "Семестр 4") {
+                bot.getApi().sendDocument(query->message->chat->id, getMediaIdFromDatabase(bd , "sem4"), "application/pdf");
+            }
             case ADMINISTRATION:
                 if (query->data == "Удалить последний файл") {
                     InlineKeyboardMarkup::Ptr keyboard = ColKeyboardExtended({{"Лекции", "Del:Lecture"}, {"Семинары", "Del:Seminar"}, {"Назад", "Назад"}});
@@ -1165,7 +1185,7 @@ int main() {
             spdlog::info("{} {}| Стартовое меню", message->from->username, message->from->id);
             if (UserState(bd, message->from->id) == REGISTRATION)
                 return;
-            vector<string> buttons = {"Лекции", "Семинары", "Настройки"};
+            vector<string> buttons = {"Лекции", "Семинары", "Архив", "Настройки"};
             if (UserAccess(bd, message->chat->id) == ADMIN)
                 buttons.push_back("Администраторская");
             InlineKeyboardMarkup::Ptr keyboard = ColKeyboard(buttons);
@@ -1259,9 +1279,12 @@ int main() {
         const string errorText = "Критическая ошибка long poll:\n" + string(error.what());
         spdlog::critical(errorText);
         DeadHand(bot, deadHandChatId, errorText);
+        g_stopRequested.store(true, std::memory_order_release);
+        g_shutdownCondition.notify_all();
     }
 
     if (delayedFiles.joinable()) {
+        g_shutdownCondition.notify_all();
         delayedFiles.join();
     }
 
