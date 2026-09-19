@@ -13,6 +13,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <queue>
 
 #include <tgbot/tgbot.h>    // Библиотеки подключённые через vcpkg
 #include <tgbot/net/CurlHttpClient.h>
@@ -57,6 +58,17 @@ enum UserAccess
 std::atomic<bool> g_stopRequested{false};
 std::condition_variable g_shutdownCondition;
 std::mutex g_shutdownMutex;
+
+struct WatermarkTask {
+    int64_t chatId;
+    std::string sourcePath;
+    std::string outputPath;
+    int64_t scheduledAt;
+};
+
+std::queue<WatermarkTask> g_watermarkTasks;
+std::mutex g_watermarkMutex;
+std::condition_variable g_watermarkCondition;
 
 void handleShutdownSignal(int) {
     g_stopRequested.store(true, std::memory_order_release);
@@ -314,6 +326,44 @@ int main() {
             }
         } });
     consoleThread.detach();
+
+    thread watermarkWorker([&bot, deadHandChatId]() {
+        Database workerDb(
+            "database/bot.db",
+            SQLite::OPEN_READWRITE
+        );
+
+        while (!g_stopRequested.load(std::memory_order_acquire)) {
+            WatermarkTask task;
+            {
+                std::unique_lock<std::mutex> lock(g_watermarkMutex);
+                g_watermarkCondition.wait(lock, [] {
+                    return g_stopRequested.load(std::memory_order_acquire) || !g_watermarkTasks.empty();
+                });
+
+                if (g_stopRequested.load(std::memory_order_acquire) && g_watermarkTasks.empty())
+                    break;
+
+                task = std::move(g_watermarkTasks.front());
+                g_watermarkTasks.pop();
+            }
+
+            try {
+                if (pdfAddWatermark(task.sourcePath, task.outputPath) != 0) {
+                    throw runtime_error("Не удалось наложить watermark на файл " + task.sourcePath);
+                }
+                setDelayedFile(workerDb, task.chatId, task.outputPath, task.scheduledAt);
+            }
+            catch (const exception& error) {
+                const string errorText = "Ошибка фонового наложения watermark для пользователя " +
+                    to_string(task.chatId) + ":\n" + error.what();
+                spdlog::error(errorText);
+                DeadHand(bot, deadHandChatId, errorText);
+            }
+        }
+
+        spdlog::info("Поток наложения watermark завершён");
+    });
 
     thread delayedFiles([&bot, &token, &user_logs, deadHandChatId]() {
         Database workerDb(
@@ -722,9 +772,17 @@ int main() {
                     bot.getApi().sendMessage(query->message->chat->id, "Файл будет отправлен через 5 минут");
                     const int64_t scheduledAt = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now().time_since_epoch()).count() + 5;
                     string path = getFilePath(bd, subject_name, fileType, count, group_name);
-                    string outputPath = "temp/" + path;
-                    pdfAddWatermark(path, outputPath);
-                    setDelayedFile(bd, query->message->chat->id, outputPath, scheduledAt);
+                    WatermarkTask task{
+                        query->message->chat->id,
+                        path,
+                        "temp/" + path,
+                        scheduledAt
+                    };
+                    {
+                        std::lock_guard<std::mutex> lock(g_watermarkMutex);
+                        g_watermarkTasks.push(std::move(task));
+                    }
+                    g_watermarkCondition.notify_one();
                 }
             }
             if (query->data == "all") {
@@ -1283,6 +1341,10 @@ int main() {
         g_stopRequested.store(true, std::memory_order_release);
         g_shutdownCondition.notify_all();
     }
+
+    g_watermarkCondition.notify_all();
+    if (watermarkWorker.joinable())
+        watermarkWorker.join();
 
     if (delayedFiles.joinable()) {
         g_shutdownCondition.notify_all();
